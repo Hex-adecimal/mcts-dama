@@ -63,6 +63,7 @@ typedef struct {
     int expansion_threshold; // Minimum visits required before expanding a node (usually 0 or 1).
     int use_lookahead;       // Enable 1-ply lookahead in rollout heuristic (0=disabled, 1=enabled).
     int verbose;             // Print search statistics (1=enabled, 0=quiet mode for tournaments).
+    int use_tree_reuse;      // Enable tree reuse between moves (0=disabled, 1=enabled).
 } MCTSConfig;
 
 /**
@@ -115,16 +116,25 @@ Node* mcts_create_root(GameState state, Arena *arena);
  * @param time_limit_seconds Maximum time allowed for the search.
  * @param config Configuration parameters for the search.
  * @param stats Optional pointer to MCTSStats to update with search statistics.
+ * @param out_new_root Optional pointer to store the chosen child (for tree reuse).
  * @return The best move found.
  */
 Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig config,
-                 MCTSStats *stats);
+                 MCTSStats *stats, Node **out_new_root);
 
 /**
  * Helper function to print a human-readable description of a move.
  * @param m The move to print.
  */
 void print_move_description(Move m);
+
+/**
+ * Finds child node matching the given move (for tree reuse).
+ * @param parent Parent node to search in.
+ * @param move Move to find.
+ * @return Child node if found, NULL otherwise.
+ */
+Node* find_child_by_move(Node *parent, const Move *move);
 
 /**
  * Calculates the maximum depth of the MCTS tree.

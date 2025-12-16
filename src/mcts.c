@@ -94,6 +94,38 @@ static Node* create_node(Node *parent, Move move, GameState state, Arena *arena)
 }
 
 /**
+ * Compares two moves for equality.
+ * @param m1 First move.
+ * @param m2 Second move.
+ * @return 1 if moves are equal, 0 otherwise.
+ */
+static int moves_equal(const Move *m1, const Move *m2) {
+    if (m1->length != m2->length) return 0;
+    for (int i = 0; i <= m1->length; i++) {
+        if (m1->path[i] != m2->path[i]) return 0;
+    }
+    return 1;
+}
+
+/**
+ * Finds child node matching the given move.
+ * Used for tree reuse to locate opponent's move in our tree.
+ * @param parent Parent node to search in.
+ * @param move Move to find.
+ * @return Child node if found, NULL otherwise.
+ */
+Node* find_child_by_move(Node *parent, const Move *move) {
+    if (!parent || !move) return NULL;
+    
+    for (int i = 0; i < parent->num_children; i++) {
+        if (moves_equal(&parent->children[i]->move_from_parent, move)) {
+            return parent->children[i];
+        }
+    }
+    return NULL;
+}
+
+/**
  * Expands a leaf node by adding one child for an untried move.
  * @param node The node to expand.
  * @param arena Pointer to the arena.
@@ -358,7 +390,7 @@ int get_tree_depth(Node *node) {
 }
 
 Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig config,
-                 MCTSStats *stats) {
+                 MCTSStats *stats, Node **out_new_root) {
     clock_t start = clock();
     int iterations = 0;
 
@@ -414,6 +446,11 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
         fprintf(stderr, "MCTS panic: No moves available!\n");
         Move empty = {0};
         return empty;
+    }
+
+    // If tree reuse enabled, return the chosen child as new root
+    if (config.use_tree_reuse && out_new_root) {
+        *out_new_root = best_child;
     }
 
     return best_child->move_from_parent;

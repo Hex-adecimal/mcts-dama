@@ -57,6 +57,11 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
     int turn_count = 0;
     int max_turns = 150; // Prevent infinite games
     
+    // Persistent roots for tree reuse
+    Node *root_white = NULL;
+    Node *root_black = NULL;
+    Move last_move = {0}; // Track last move for tree reuse
+    
     while (1) {
         // Check for game over
         MoveList list;
@@ -77,13 +82,46 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
         // Select config and stats based on current player
         MCTSConfig *config = (state.current_player == WHITE) ? config_white : config_black;
         MCTSStats *stats = (state.current_player == WHITE) ? stats_white : stats_black;
+        Node **my_root = (state.current_player == WHITE) ? &root_white : &root_black;
+        Node **opponent_root = (state.current_player == WHITE) ? &root_black : &root_white;
+        
+        // Reset arena if too full (>80%)
+        if (arena->offset > arena->size * 0.8) {
+            arena_reset(arena);
+            root_white = NULL;
+            root_black = NULL;
+            *my_root = NULL;
+        }
         
         // MCTS search
-        arena_reset(arena);
-        Node *root = mcts_create_root(state, arena);
+        Node *root;
+        
+        // Attempt tree reuse: find opponent's move in our tree
+        if (config->use_tree_reuse && *my_root != NULL && turn_count > 0) {
+            Node *reused = find_child_by_move(*my_root, &last_move);
+            if (reused) {
+                root = reused; // Reuse opponent's subtree
+            } else {
+                // Opponent's move not in our tree, create new
+                root = mcts_create_root(state, arena);
+            }
+        } else {
+            // First move or tree reuse disabled
+            root = mcts_create_root(state, arena);
+        }
         
         double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;
-        Move chosen_move = mcts_search(root, arena, time_limit, *config, stats);
+        
+        Node *new_root = NULL;
+        Move chosen_move = mcts_search(root, arena, time_limit, *config, stats, &new_root);
+        
+        // Save chosen move for opponent's tree reuse
+        last_move = chosen_move;
+        
+        // Update opponent's root to our chosen child (for their next turn)
+        if (config->use_tree_reuse && new_root) {
+            *opponent_root = new_root;
+        }
         
         // Apply move
         apply_move(&state, &chosen_move);
@@ -111,7 +149,8 @@ int main() {
         .draw_score = DRAW_SCORE,
         .expansion_threshold = EXPANSION_THRESHOLD,
         .use_lookahead = 0,  // Baseline: no lookahead
-        .verbose = 0         // Quiet mode for tournament
+        .verbose = 0,        // Quiet mode for tournament
+        .use_tree_reuse = 1  // Enable tree reuse
     };
     
     MCTSConfig config_B = {
@@ -120,7 +159,8 @@ int main() {
         .draw_score = DRAW_SCORE,
         .expansion_threshold = EXPANSION_THRESHOLD,
         .use_lookahead = 1,  // Improved: with lookahead
-        .verbose = 0         // Quiet mode for tournament
+        .verbose = 0,        // Quiet mode for tournament
+        .use_tree_reuse = 1  // Enable tree reuse
     };
     
     printf("Config A: epsilon=%.2f, lookahead=%d\n", config_A.rollout_epsilon, config_A.use_lookahead);

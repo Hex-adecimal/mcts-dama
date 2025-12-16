@@ -21,4 +21,5 @@
 #define DEFAULT_ROLLOUT_EPSILON 0.2
 #define EXPANSION_THRESHOLD 0
 #define DEFAULT_USE_LOOKAHEAD 1 // Enable 1-ply lookahead by default
+#define DEFAULT_TREE_REUSE 1    // Enable tree reuse by default
 

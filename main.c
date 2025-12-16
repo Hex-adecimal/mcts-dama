@@ -65,11 +65,12 @@ int main() {
             .draw_score = DRAW_SCORE,
             .expansion_threshold = EXPANSION_THRESHOLD,
             .use_lookahead = DEFAULT_USE_LOOKAHEAD,
-            .verbose = 1  // Enable output for normal gameplay
+            .verbose = 1,  // Enable output for normal gameplay
+            .use_tree_reuse = 0  // Disable in normal play (single-tree)
         };
 
         double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;
-        Move chosen_move = mcts_search(root, &mcts_arena, time_limit, config, NULL);
+        Move chosen_move = mcts_search(root, &mcts_arena, time_limit, config, NULL, NULL);
         
 
         // D. Stampa info mossa
