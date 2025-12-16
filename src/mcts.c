@@ -382,16 +382,21 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     }
 
     int depth = get_tree_depth(root);
+    double elapsed_time = (double)(clock() - start) / CLOCKS_PER_SEC;
+    size_t memory_used = arena->offset; // Bytes used in arena
     
     // Update statistics if provided
     if (stats) {
         stats->total_moves++;
         stats->total_iterations += iterations;
         stats->total_depth += depth;
+        stats->total_time += elapsed_time;
+        stats->total_memory += memory_used;
     }
 
     if (config.verbose) {
-        printf("[MCTS] %d simulations. Tree depth: %d.\n", iterations, depth);
+        printf("[MCTS] %d simulations. Tree depth: %d. Time: %.3fs (%.0f iter/s). Memory: %.1f KB\n", 
+               iterations, depth, elapsed_time, iterations / elapsed_time, memory_used / 1024.0);
     }
 
     // Select best move (Robust Child: most visited)

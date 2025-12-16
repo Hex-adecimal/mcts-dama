@@ -72,6 +72,8 @@ typedef struct {
     int total_moves;         // Total number of moves made
     long total_iterations;   // Total simulations across all moves
     long total_depth;        // Total tree depth across all moves
+    double total_time;       // Total time spent in MCTS search (seconds)
+    size_t total_memory;     // Total memory used by MCTS trees (bytes)
 } MCTSStats;
 
 /**

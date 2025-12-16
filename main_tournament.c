@@ -134,8 +134,8 @@ int main() {
     double elo_B = INITIAL_ELO;
     
     // Initialize statistics
-    MCTSStats stats_A = {0, 0, 0};
-    MCTSStats stats_B = {0, 0, 0};
+    MCTSStats stats_A = {0, 0, 0, 0.0, 0};
+    MCTSStats stats_B = {0, 0, 0, 0.0, 0};
     
     printf("Playing %d games...\n\n", num_games);
     
@@ -231,12 +231,18 @@ int main() {
     printf("Config A:\n");
     printf("  Average simulations/move: %ld\n", stats_A.total_moves > 0 ? stats_A.total_iterations / stats_A.total_moves : 0);
     printf("  Average tree depth: %ld\n", stats_A.total_moves > 0 ? stats_A.total_depth / stats_A.total_moves : 0);
+    printf("  Average iterations/sec: %.0f\n", stats_A.total_time > 0 ? stats_A.total_iterations / stats_A.total_time : 0);
+    printf("  Average memory/move: %.1f KB\n", stats_A.total_moves > 0 ? (stats_A.total_memory / stats_A.total_moves) / 1024.0 : 0);
     printf("  Total moves: %d\n", stats_A.total_moves);
+    printf("  Total time: %.1f seconds\n", stats_A.total_time);
     printf("\n");
     printf("Config B:\n");
     printf("  Average simulations/move: %ld\n", stats_B.total_moves > 0 ? stats_B.total_iterations / stats_B.total_moves : 0);
     printf("  Average tree depth: %ld\n", stats_B.total_moves > 0 ? stats_B.total_depth / stats_B.total_moves : 0);
+    printf("  Average iterations/sec: %.0f\n", stats_B.total_time > 0 ? stats_B.total_iterations / stats_B.total_time : 0);
+    printf("  Average memory/move: %.1f KB\n", stats_B.total_moves > 0 ? (stats_B.total_memory / stats_B.total_moves) / 1024.0 : 0);
     printf("  Total moves: %d\n", stats_B.total_moves);
+    printf("  Total time: %.1f seconds\n", stats_B.total_time);
     printf("\n");
     
     printf("ELO Rating A: %.0f (Δ%+.0f)\n", elo_A, elo_A - INITIAL_ELO);
