@@ -1,0 +1,28 @@
+# Binaries
+bin/
+*.o
+*.out
+*.exe
+
+# Object files
+obj/
+*.d
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.a
+*.so
+*.dylib
+
+# Test artifacts
+test_output.txt
