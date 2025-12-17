@@ -1,11 +1,24 @@
+UNAME_S := $(shell uname -s)
+
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Isrc
-# OpenMP support for macOS (using Homebrew's libomp)
-CFLAGS += -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
-LDFLAGS = -L/opt/homebrew/opt/libomp/lib -lomp
-TARGET = bin/dama
+LDFLAGS = -lm
+
+# OpenMP (Linux & macOS with GCC)
+ifeq ($(UNAME_S),Linux)
+    CFLAGS  += -fopenmp
+    LDFLAGS += -fopenmp
+endif
+
+ifeq ($(UNAME_S),Darwin)
+    # Requires Homebrew GCC (not Apple clang)
+    CFLAGS  += -fopenmp
+    LDFLAGS += -fopenmp
+endif
+
 OBJ_DIR = obj
 BIN_DIR = bin
+TARGET  = $(BIN_DIR)/dama
 
 # Source files
 SRCS = main.c src/game.c src/mcts.c
