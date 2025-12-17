@@ -218,9 +218,8 @@ int main() {
         } else {
             // B plays White, A plays Black
             winner = play_match(&config_B, &config_A, &thread_arena, &local_stats_B, &local_stats_A);
-            // Adjust winner perspective (we want it from A's viewpoint)
-            if (winner == WHITE) winner = BLACK;
-            else if (winner == BLACK) winner = WHITE;
+            // Note: winner now represents the raw match result (WHITE/BLACK/Draw)
+            // Post-processing will interpret based on who played which color
         }
         
         // Store results
@@ -240,15 +239,15 @@ int main() {
             
             if (game % 2 == 0) {
                 printf("A(White) vs B(Black) - ");
+                if (winner == WHITE) printf("A wins\n");
+                else if (winner == BLACK) printf("B wins\n");
+                else printf("Draw\n");
             } else {
                 printf("B(White) vs A(Black) - ");
+                if (winner == WHITE) printf("B wins\n");
+                else if (winner == BLACK) printf("A wins\n");
+                else printf("Draw\n");
             }
-            
-            if (winner == WHITE && game % 2 == 0) printf("A wins\n");
-            else if (winner == BLACK && game % 2 == 0) printf("B wins\n");
-            else if (winner == WHITE && game % 2 == 1) printf("B wins\n");
-            else if (winner == BLACK && game % 2 == 1) printf("A wins\n");
-            else printf("Draw\n");
             
             fflush(stdout);
         }
