@@ -1,6 +1,6 @@
 UNAME_S := $(shell uname -s)
 
-CC = gcc
+CC = gcc-15
 CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Isrc
 LDFLAGS = -lm
 

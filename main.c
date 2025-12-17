@@ -7,19 +7,6 @@
 #include "mcts.h"
 #include "params.h"
 
-/*
-*   TODO: Tree Policy Enhancement
-        - Bandit Based 
-        - Selection (Transposition Table)
-        - AMAF (??)
-        - Game Theoretic (??)
-        - Move Pruning (??)
-        - Simulation (Rule Based Simulation)
-        - Backpropagation 
-        - Parallelisation        
-*/
-
-
 // --- HELPERS DI DEBUG ---
 
 int main() {
