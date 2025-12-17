@@ -28,21 +28,21 @@ Structured according to *Browne et al. (2012) MCTS Survey*.
 
 #### Bandit Based
 
-  - [ ] **UCB1-Tuned**: Implement variance-based upper confidence bound (Eq. 4 in the survey) to handle nodes with high score variance more aggressively than standard UCB1.
+  - [x] **UCB1-Tuned**: Implement variance-based upper confidence bound (Eq. 4 in the survey) to handle nodes with high score variance more aggressively than standard UCB1.
 
 #### Selection
 
-  - [ ] **Zobrist Hashing**: Implement incremental hashing in `game.c` to identify unique board states.
-  - [ ] **Transposition Table (DAG)**: Map identical states reached via different paths to the same node in memory. This is critical for Dama due to frequent move transpositions.
+  - [x] **Zobrist Hashing**: Implement incremental hashing in `game.c` to identify unique board states.
+  - [x] **Transposition Table (DAG)**: Map identical states reached via different paths to the same node in memory. This is critical for Dama due to frequent move transpositions.
   - [ ] **History Heuristic**: Detect 3-fold repetition to correctly evaluate draw states.
 
 #### AMAF (All Moves As First)
 
-  - [ ] **RAVE (Rapid Action Value Estimation)**: *[Low Priority]* Share statistics between tree nodes assuming that a move's value is independent of when it is played.
+  - [ ] **RAVE (Rapid Action Value Estimation)**: *[Low Priority]* Share statistics between tree nodes assuming that a move\'s value is independent of when it is played.
 
 #### Game Theoretic
 
-  - [ ] **MCTS-Solver**: Propagate "Proven Win" (+∞) and "Proven Loss" (-∞) values up the tree. This allows the MCTS to play perfectly in endgames without requiring infinite simulations.
+  - [x] **MCTS-Solver**: Propagate "Proven Win" (+∞) and "Proven Loss" (-∞) values up the tree. This allows the MCTS to play perfectly in endgames without requiring infinite simulations.
 
 #### Move Pruning (Domain Knowledge)
 

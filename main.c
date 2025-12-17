@@ -10,6 +10,8 @@
 // --- HELPERS DI DEBUG ---
 
 int main() {
+    zobrist_init(); // Initialize Zobrist Hashing Keys
+    
     // 1. Setup Random e Arena
     srand(time(NULL));
     
@@ -58,7 +60,12 @@ int main() {
             .expansion_threshold = EXPANSION_THRESHOLD,
             .use_lookahead = DEFAULT_USE_LOOKAHEAD,
             .verbose = 1,  // Enable output for normal gameplay
-            .use_tree_reuse = 0  // Disable in normal play (single-tree)
+            .use_tree_reuse = 0, // Disable in normal play (single-tree)
+            .use_ucb1_tuned = 0, // Default: Standard UCB1
+            .use_tt = 0,         // Default: No Transposition Table
+            .use_solver = 0,     // Default: No Solver
+            .use_progressive_bias = 0, // Default: No Bias
+            .bias_constant = 0.0
         };
 
         double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;

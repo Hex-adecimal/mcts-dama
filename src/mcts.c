@@ -60,6 +60,65 @@ void arena_free(Arena *a) {
 }
 
 // ================================================================================================
+//  HEURISTICS
+// ================================================================================================
+
+/**
+ * Evaluates a move based on heuristics (Promotion, Safety, Center Control).
+ * Higher score = better move.
+ */
+static double evaluate_move_heuristic(const GameState *state, const Move *move) {
+    double score = 0.0;
+    int us = state->current_player;
+    
+    int target_idx = (move->length == 0) ? 1 : move->length;
+    int from = move->path[0];
+    int to = move->path[target_idx];
+    
+    int from_row = from / 8;
+    int row = to / 8;
+    int col = to % 8;
+
+    // 1. Capture Bonus (huge) - Covered by rules usually, but if choice exists:
+    if (move->length > 0) {
+        score += 10.0 * move->length; // Prioritize more captures
+    }
+
+    // 2. Promotion Bonus
+    if (!move->is_lady_move) {
+        if (row == 0 || row == 7) { // Reaching end
+            score += WEIGHT_PROMOTION;
+        }
+        
+        // Advancement Bonus
+        // White moves UP (towards 7), Black moves DOWN (towards 0)
+        int dist = (us == WHITE) ? (7 - row) : row;
+        score += (7 - dist) * WEIGHT_ADVANCE;
+    }
+
+    // 3. Safety Bonus (Edges)
+    if (col == 0 || col == 7) {
+        score += WEIGHT_SAFE_EDGE;
+    }
+
+    // 4. Center Control (New!)
+    // Rows 3,4 and Cols 2,3,4,5 are critical.
+    if ((row == 3 || row == 4) && (col >= 2 && col <= 5)) {
+        score += 3.0; 
+    }
+
+    // 5. Base Protection (Penalty)
+    // Avoid moving from base rank (0 for White, 7 for Black) unless necessary
+    if (!move->is_lady_move) {
+         if ((us == WHITE && from_row == 0) || (us == BLACK && from_row == 7)) {
+             score -= WEIGHT_BASE_BREAK;
+         }
+    }
+    
+    return score;
+}
+
+// ================================================================================================
 //  NODE MANAGEMENT
 // ================================================================================================
 
@@ -85,10 +144,29 @@ static Node* create_node(Node *parent, Move move, GameState state, Arena *arena)
     node->num_children = 0;
     node->visits = 0;
     node->score = 0.0;
+    node->sum_sq_score = 0.0; // Init variance sum
 
     // Generate all possible moves from this state (untried moves)
     generate_moves(&node->state, &node->untried_moves);
-    node->is_terminal = (node->untried_moves.count == 0);
+    node->is_terminal = (node->untried_moves.count == 0 && node->num_children == 0) ? 1 : 0; 
+    
+    // SOLVER INIT
+    node->status = SOLVED_NONE;
+    if (node->is_terminal) {
+        // If no moves, I lost. (Assuming no stale-mate draw logic here for now)
+        node->status = SOLVED_LOSS; 
+        
+        if (state.moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) {
+             node->status = SOLVED_DRAW;
+        }
+    }
+    
+    // HEURISTIC INIT (Progressive Bias)
+    if (parent) {
+        node->heuristic_score = evaluate_move_heuristic(&parent->state, &move);
+    } else {
+        node->heuristic_score = 0.0;
+    }
 
     return node;
 }
@@ -125,13 +203,69 @@ Node* find_child_by_move(Node *parent, const Move *move) {
     return NULL;
 }
 
+// ================================================================================================
+//  TRANSPOSITION TABLE
+// ================================================================================================
+
+// Simple Hash Table with Linear Probing (or simpler Direct Mapping for speed)
+// For MCTS, we can use a large enough table and just overwrite or collision chain.
+// Let's use Open Addressing with Linear Probing for simplicity and cache locality.
+
+static TranspositionTable* tt_create(size_t size) {
+    TranspositionTable *tt = malloc(sizeof(TranspositionTable));
+    tt->size = size;
+    tt->mask = size - 1;
+    tt->count = 0;
+    tt->collisions = 0;
+    tt->buckets = calloc(size, sizeof(Node*)); // Init to NULL
+    return tt;
+}
+
+static void tt_free(TranspositionTable *tt) {
+    if (tt) {
+        free(tt->buckets);
+        free(tt);
+    }
+}
+
+static Node* tt_lookup(TranspositionTable *tt, uint64_t hash) {
+    if (!tt) return NULL;
+    size_t idx = hash & tt->mask;
+    
+    // Simple direct lookup for now (soft collision handling: just overwrite/ignore)
+    // For a real robust implementation we would do probing.
+    // If we overwrite, we lose the old node reference in the TT (but valid in Arena).
+    // Let's check if the node at idx matches the hash.
+    // BUT we don't store the full hash in the Node... we store the state.
+    
+    Node *node = tt->buckets[idx];
+    if (node && node->state.hash == hash) {
+        // Double check full state equality to be safe (hash collisions are rare but possible)
+        // For Dama 64-bit Zobrist, collision is very unlikely.
+        return node;
+    }
+    return NULL; 
+}
+
+static void tt_insert(TranspositionTable *tt, Node *node) {
+    if (!tt) return;
+    size_t idx = node->state.hash & tt->mask;
+    
+    // Always overwrite (Replacement scheme: Always Replace)
+    // Ideally we might keep the one with more visits?
+    // For expansion, strict consistency matters.
+    if (tt->buckets[idx] != NULL) tt->collisions++;
+    tt->buckets[idx] = node;
+    tt->count++;
+}
+
 /**
  * Expands a leaf node by adding one child for an untried move.
  * @param node The node to expand.
  * @param arena Pointer to the arena.
  * @return Pointer to the newly created child node.
  */
-static Node* expand_node(Node *node, Arena *arena) {
+static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt) {
     if (node->untried_moves.count == 0) return node; // Should not happen if checked before
 
     // Pop the last move from untried_moves (efficient)
@@ -144,12 +278,42 @@ static Node* expand_node(Node *node, Arena *arena) {
     apply_move(&next_state, &move_to_try);
 
     // Create the child node
-    Node *child = create_node(node, move_to_try, next_state, arena);
+    // Check TT first!
+    Node *child = NULL;
+    
+    if (tt) {
+        // Calculate hash is already done in init_game/apply_move for the state?
+        // Wait, apply_move updates hash? Yes.
+        // But we computed next_state above.
+        // apply_move in game.c updates the hash in the state struct!
+        child = tt_lookup(tt, next_state.hash);
+    }
+    
+    if (!child) {
+        child = create_node(node, move_to_try, next_state, arena);
+        if (tt) tt_insert(tt, child);
+    } else {
+        // Found in TT (Transposition)
 
-    // Resize children array using Arena (simple append logic)
-    // Note: In a standard allocator, we would use realloc. 
-    // Here we allocate a new array and copy. This is slightly inefficient but safe for Arena.
-    // Optimization: Could allocate max_children upfront if MAX_MOVES is small.
+        if (child->status != SOLVED_NONE) {
+             // We found a node that is already solved!
+             // This is great info.
+        }
+        child = create_node(node, move_to_try, next_state, arena);
+        
+        Node *match = tt_lookup(tt, next_state.hash);
+        if (match) {
+            // Warm-start this node with stats from the transposition!
+            // This is "Transposition Table initialization".
+            child->visits = match->visits;
+            child->score  = match->score;
+            child->sum_sq_score = match->sum_sq_score;
+        } else {
+            if (tt) tt_insert(tt, child);
+        }
+    }
+
+    // Resize children array using Arena
     size_t new_size = (node->num_children + 1) * sizeof(Node*);
     Node **new_children = (Node**)arena_alloc(arena, new_size);
 
@@ -182,27 +346,106 @@ static double calculate_ucb1(Node *child) {
 }
 
 /**
- * Selects the best child node to explore using UCB1.
+ * Calculates the UCB1-Tuned value for a node.
+ * Uses variance estimate to tune the confidence interval.
+ * Formula: UCB = Mean + sqrt( (ln N / n) * min(1/4, V) )
+ * Where V = Variance + sqrt( (2 ln N) / n )
+ */
+static double calculate_ucb1_tuned(Node *child) {
+    if (child->visits == 0) return 1e9; // Infinite value for unvisited nodes
+
+    double N = (double)child->parent->visits;
+    double n = (double)child->visits;
+    
+    double mean = child->score / n;
+    
+    // Calculate variance of rewards
+    // Var(X) = E[X^2] - (E[X])^2
+    double avg_sq_score = child->sum_sq_score / n;
+    double variance = avg_sq_score - (mean * mean);
+    
+    // Variance Upper Bound
+    double v_upper = variance + sqrt(2.0 * log(N) / n);
+
+    // Tuned exploration term
+    // min(1/4, v_upper) because max variance of a bounded [0,1] var consists of 0.25
+    double min_v = (v_upper < 0.25) ? v_upper : 0.25;
+    double exploration = sqrt((log(N) / n) * min_v);
+
+    return mean + exploration;
+}
+
+static double calculate_ucb1_score(Node *child, MCTSConfig config) {
+    double base_score;
+    if (config.use_ucb1_tuned) {
+        base_score = calculate_ucb1_tuned(child);
+    } else {
+        base_score = calculate_ucb1(child);
+    }
+    
+    if (config.use_progressive_bias) {
+        double bias = config.bias_constant * (child->heuristic_score / (double)(child->visits + 1));
+        return base_score + bias;
+    }
+    
+    return base_score;
+}
+
+/**
+ * Selects the best child node to explore using UCB1 or UCB1-Tuned.
  * Descends the tree until a node with untried moves or a terminal node is reached.
  */
-static Node* select_promising_node(Node *root) {
+// Returns the best child node based on UCB1 or UCB1-Tuned
+static Node* select_promising_node(Node *root, MCTSConfig config) {
     Node *current = root;
-    
-    // While fully expanded and not terminal
     while (!current->is_terminal && current->untried_moves.count == 0) {
-        double best_ucb = -1.0;
-        Node *best_child = NULL;
+        if (current->num_children == 0) break; // Should be covered by is_terminal logic
 
-        for (int i = 0; i < current->num_children; i++) {
-            double ucb = calculate_ucb1(current->children[i]);
-            if (ucb > best_ucb) {
-                best_ucb = ucb;
-                best_child = current->children[i];
+        // SOLVER LOGIC: Taking the win immediately
+        if (config.use_solver && current->status == SOLVED_WIN) {
+            // Find the child that gives the win (opponent loss)
+            for (int i=0; i < current->num_children; i++) {
+                if (current->children[i]->status == SOLVED_LOSS) {
+                    current = current->children[i];
+                    goto next_node; // Jump to next iteration to avoid UCB calculation
+                }
             }
         }
         
-        if (best_child == NULL) break; // Should not happen
-        current = best_child;
+        double best_score = -1e9;
+        Node *best_node = NULL;
+        
+        for (int i = 0; i < current->num_children; i++) {
+            Node *child = current->children[i];
+            double ucb_value;
+            
+            // SOLVER PRUNING:
+            if (config.use_solver) {
+                 if (child->status == SOLVED_WIN) {
+                     // This child leads to Opponent Win. Bad for us.
+                     // Assign penalty unless all are bad.
+                     ucb_value = -100000.0; 
+                 } else if (child->status == SOLVED_LOSS) {
+                     // This child leads to Opponent Loss. We WIN.
+                     // Should be picked immediately above, but if we are here,
+                     // it means we missed it? No, handled above.
+                     ucb_value = 100000.0 + child->score; // Very High
+                 } else {
+                     // Normal UCB with potential bias
+                     ucb_value = calculate_ucb1_score(child, config);
+                 }
+            } else {
+                 ucb_value = calculate_ucb1_score(child, config);
+            }
+            
+            if (ucb_value > best_score) {
+                best_score = ucb_value;
+                best_node = child;
+            }
+        }
+        current = best_node;
+        
+        next_node:;
     }
     return current;
 }
@@ -220,46 +463,18 @@ static Move pick_smart_move(const MoveList *list, const GameState *state, int us
     if (list->count == 1) return list->moves[0];
 
     int best_score = -100000;
-    int best_idx = 0;
-    int random_tie_breaker = rand() % 10; 
-    int us = state->current_player;
+    int best_idx = 0; 
 
+    // Evaluate moves
     for (int i = 0; i < list->count; i++) {
         Move m = list->moves[i];
-        int score = random_tie_breaker;
-
-        int from = m.path[0];
-        int from_row = from / 8;
-
-        int target_idx = (m.length == 0) ? 1 : m.length;
-        int to = m.path[target_idx];
-        int row = to / 8;
-        int col = to % 8;
-
-        // Promotion Bonus
-        if (!m.is_lady_move) {
-            if (row == 0 || row == 7) {
-                score += WEIGHT_PROMOTION;
-            }
-            
-            // Advancement Bonus
-            // White moves UP (towards 7), Black moves DOWN (towards 0)
-            int dist = (us == WHITE) ? (7 - row) : row;
-            score += (7 - dist) * WEIGHT_ADVANCE;
-        }
-
-        // Safety Bonus (Edges)
-        if (col == 0 || col == 7) {
-            score += WEIGHT_SAFE_EDGE;
-        }
-
-        // Base Protection (Penalty)
-        // Avoid moving from base rank (0 for White, 7 for Black) unless necessary
-        if (!m.is_lady_move) {
-             if ((us == WHITE && from_row == 0) || (us == BLACK && from_row == 7)) {
-                 score -= WEIGHT_BASE_BREAK;
-             }
-        }
+        int score = 0;
+        
+        // Prefer captures (already handled by rule, but good for robust fallback)
+        if (m.length > 0) score += 1000 * m.length;
+        
+        // Use shared heuristic function
+        score += (int)evaluate_move_heuristic(state, &m);
 
         // Danger Check (1-ply lookahead)
         // Only check for simple moves (captures are usually good)
@@ -297,12 +512,14 @@ static Move pick_smart_move(const MoveList *list, const GameState *state, int us
  * Simulates a random game from the given node to determine a winner.
  * @return Winner color (WHITE/BLACK) or -1 for Draw.
  */
-static int simulate_rollout(Node *node, MCTSConfig config) {
+static double simulate_rollout(Node *node, MCTSConfig config) {
     GameState temp_state = node->state;
     
     // Check if the node itself is terminal
     if (node->is_terminal) {
-        return (temp_state.current_player == WHITE) ? BLACK : WHITE;
+        int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;
+        if (winner == node->player_who_just_moved) return WIN_SCORE;
+        else return LOSS_SCORE;
     }
 
     int depth = 0;
@@ -313,11 +530,13 @@ static int simulate_rollout(Node *node, MCTSConfig config) {
         generate_moves(&temp_state, &temp_moves);
 
         if (temp_moves.count == 0) {
-            return (temp_state.current_player == WHITE) ? BLACK : WHITE;
+            int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;
+            if (winner == node->player_who_just_moved) return WIN_SCORE;
+            else return LOSS_SCORE;
         }
         
         if (temp_state.moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) {
-            return -1; // Draw
+            return DRAW_SCORE; // Draw
         }
 
         Move chosen_move;
@@ -337,7 +556,7 @@ static int simulate_rollout(Node *node, MCTSConfig config) {
         apply_move(&temp_state, &chosen_move);
         depth++;
     }
-    return -1; // Draw if depth limit reached
+    return DRAW_SCORE; // Draw if depth limit reached
 }
 
 // ================================================================================================
@@ -348,19 +567,55 @@ static int simulate_rollout(Node *node, MCTSConfig config) {
  * Propagates the simulation result back up the tree.
  * Updates visits and scores for all nodes in the path.
  */
-static void backpropagate(Node *node, int winner) {
+// Helper to check if a node is fully expanded and solved
+static void update_solver_status(Node *node) {
+    if (node->status != SOLVED_NONE) return; // Already solved
+    
+    // Condition 1: Can we win immediately?
+    // If ANY child is SOLVED_LOSS (for the opponent), implies SOLVED_WIN for us.
+    for (int i = 0; i < node->num_children; i++) {
+        if (node->children[i]->status == SOLVED_LOSS) {
+            node->status = SOLVED_WIN;
+            // Best move is to go here!
+            return; 
+        }
+    }
+
+    // Condition 2: Are we forced to lose?
+    // Must be fully expanded (no untried moves) AND all children are SOLVED_WIN (for the opponent).
+    if (node->untried_moves.count == 0) {
+        int all_win = 1;
+        for (int i = 0; i < node->num_children; i++) {
+            if (node->children[i]->status != SOLVED_WIN) {
+                all_win = 0;
+                break;
+            }
+        }
+        
+        if (all_win && node->num_children > 0) { // If num_children=0, handled in init (Terminal)
+            node->status = SOLVED_LOSS;
+        }
+    }
+}
+
+static void backpropagate(Node *node, double result, int use_solver) {
+    Node *child = NULL; // Keep track of the node we came from
+    
     while (node != NULL) {
         node->visits++;
         
-        if (winner == -1) {
-            node->score += DRAW_SCORE;
-        } else if (winner == node->player_who_just_moved) {
-            // If the winner is the player who just moved to create this node,
-            // then this node represents a good state for that player.
-            node->score += WIN_SCORE;
-        } else {
-            node->score += LOSS_SCORE;
+        // Add Result
+        node->score += result;
+        node->sum_sq_score += (result * result);
+
+        // SOLVER UPDATE
+        if (use_solver) {
+            if (child == NULL || child->status != SOLVED_NONE) {
+                update_solver_status(node);
+            }
         }
+
+        child = node; // Move up
         node = node->parent;
     }
 }
@@ -394,24 +649,39 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     clock_t start = clock();
     int iterations = 0;
 
+    // Initialize Transposition Table if enabled
+    TranspositionTable *tt = NULL;
+    if (config.use_tt) {
+        // Size should be large power of 2. 
+        // 1M entries * 8 bytes = 8MB. Cheap.
+        tt = tt_create(1024 * 1024); 
+    }
+
     // Main MCTS Loop
-    while ( (double)(clock() - start) / CLOCKS_PER_SEC < time_limit_seconds ) {
+    do {
+        // SAFETY CHECK: Stop if Arena is nearly full to prevent OOM crash
+        if (arena->offset > arena->size * 0.95) {
+            fprintf(stderr, "[WARNING] MCTS Memory Limit Hit: %.1f MB / %.1f MB used. Stopping search early.\n", 
+                    (double)arena->offset / (1024.0 * 1024.0), (double)arena->size / (1024.0 * 1024.0));
+            break; 
+        }
+
         // 1. Selection
-        Node *leaf = select_promising_node(root);
+        Node *leaf = select_promising_node(root, config);
         
         // 2. Expansion
         if (!leaf->is_terminal) {
-            leaf = expand_node(leaf, arena); 
+            leaf = expand_node(leaf, arena, tt); 
         }
 
         // 3. Simulation
-        int winner = simulate_rollout(leaf, config);
+        double result = simulate_rollout(leaf, config);
         
         // 4. Backpropagation
-        backpropagate(leaf, winner);
+        backpropagate(leaf, result, config.use_solver);
         
         iterations++;
-    }
+    } while ( (double)(clock() - start) / CLOCKS_PER_SEC < time_limit_seconds );
 
     int depth = get_tree_depth(root);
     double elapsed_time = (double)(clock() - start) / CLOCKS_PER_SEC;
@@ -452,6 +722,8 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     if (config.use_tree_reuse && out_new_root) {
         *out_new_root = best_child;
     }
+
+    if (tt) tt_free(tt);
 
     return best_child->move_from_parent;
 }

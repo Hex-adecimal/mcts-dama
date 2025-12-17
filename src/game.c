@@ -21,13 +21,72 @@ static const uint64_t PAWN_MASKS[2][2] = {
     { NOT_FILE_H, NOT_FILE_A }  // BLACK (for -7, for -9)
 };
 
-// Offsets for Jumps
-// White: +18 (NE), +14 (NW)
-// Black: -14 (SE), -18 (SW)
-static const int JUMP_OFFSETS[2][2] = {
-    { 18, 14 },   // WHITE
-    { -14, -18 }  // BLACK
-};
+// --- ZOBRIST HASHING ---
+
+// [Color][PieceType][Square]
+// Color: 0=White, 1=Black
+// PieceType: 0=Pawn, 1=Lady
+static uint64_t zobrist_keys[2][2][64];
+static uint64_t zobrist_black_move;
+
+// Simple PRNG for reproducible runs
+static uint64_t rand64() {
+    static uint64_t seed = 0x987654321ULL;
+    seed ^= seed << 13;
+    seed ^= seed >> 7;
+    seed ^= seed << 17;
+    return seed;
+}
+
+void zobrist_init() {
+    for (int c = 0; c < 2; c++) {
+        for (int pt = 0; pt < 2; pt++) {
+            for (int sq = 0; sq < 64; sq++) {
+                zobrist_keys[c][pt][sq] = rand64();
+            }
+        }
+    }
+    zobrist_black_move = rand64();
+}
+
+static uint64_t compute_full_hash(const GameState *state) {
+    uint64_t hash = 0;
+    
+    // White Pieces
+    Bitboard wp = state->white_pieces;
+    while(wp) {
+        int sq = __builtin_ctzll(wp);
+        hash ^= zobrist_keys[WHITE][0][sq];
+        wp &= (wp - 1);
+    }
+    // White Ladies
+    Bitboard wl = state->white_ladies;
+    while(wl) {
+        int sq = __builtin_ctzll(wl);
+        hash ^= zobrist_keys[WHITE][1][sq];
+        wl &= (wl - 1);
+    }
+    // Black Pieces
+    Bitboard bp = state->black_pieces;
+    while(bp) {
+        int sq = __builtin_ctzll(bp);
+        hash ^= zobrist_keys[BLACK][0][sq];
+        bp &= (bp - 1);
+    }
+    // Black Ladies
+    Bitboard bl = state->black_ladies;
+    while(bl) {
+        int sq = __builtin_ctzll(bl);
+        hash ^= zobrist_keys[BLACK][1][sq];
+        bl &= (bl - 1);
+    }
+    
+    if (state->current_player == BLACK) {
+        hash ^= zobrist_black_move;
+    }
+    
+    return hash;
+}
 
 
 // --- INITIALIZATION AND PRINTING ---
@@ -58,6 +117,8 @@ void init_game(GameState *state) {
     // Row 6: 0xAA shifted by 48
     // Row 7: 0x55 shifted by 56
     state->black_pieces = 0x55AA550000000000ULL;
+    
+    state->hash = compute_full_hash(state);
 }
 
 /**
@@ -180,8 +241,20 @@ void apply_move(GameState *state, const Move *move) {
     // If capture (length > 0), dest is path[length].
     int to = (move->length == 0) ? move->path[1] : move->path[move->length];
 
+    // --- ZOBRIST: Remove moving piece from source ---
+    // We need to know what was at 'from' (Pawn or Lady)
+    int is_lady = move->is_lady_move; // Trusted from move generation
+    
+    state->hash ^= zobrist_keys[us][is_lady][from];
+
     // 1. Move the piece (and handle promotion)
     perform_movement(state, from, to, us);
+
+    // --- ZOBRIST: Add piece at destination ---
+    // Check if it promoted. perform_movement handles the bitboard change.
+    // We check the destination bitboard to see what it is now.
+    int now_lady = (us == WHITE) ? check_bit(state->white_ladies, to) : check_bit(state->black_ladies, to);
+    state->hash ^= zobrist_keys[us][now_lady][to];
 
     // 2. Remove captured pieces (if any)
     if (move->length > 0) {
@@ -190,7 +263,15 @@ void apply_move(GameState *state, const Move *move) {
         Bitboard *enemy_ladies = (them == BLACK) ? &state->black_ladies : &state->white_ladies;
         
         for (int i = 0; i < move->length; i++) {
-            Bitboard remove_mask = ~(1ULL << move->captured_squares[i]);
+            int cap_sq = move->captured_squares[i];
+            
+            // Check what is currently there
+             int is_l = check_bit(*enemy_ladies, cap_sq);
+             
+             if (is_l) state->hash ^= zobrist_keys[them][1][cap_sq];
+             else      state->hash ^= zobrist_keys[them][0][cap_sq];
+
+            Bitboard remove_mask = ~(1ULL << cap_sq);
             *enemy_pieces &= remove_mask;
             *enemy_ladies &= remove_mask;
         }
@@ -201,6 +282,7 @@ void apply_move(GameState *state, const Move *move) {
 
     // 3. Switch Turn
     state->current_player = (Color)(us ^ 1);
+    state->hash ^= zobrist_black_move; // Toggle turn hash
 }
 
 // --- MOVE GENERATION ---
@@ -225,9 +307,10 @@ static void add_simple_move(MoveList *list, int from, int to, int is_lady) {
 
 
 // Evita la duplicazione del codice di salvataggio e calcolo score
-static inline void save_move(MoveList *list, const GameState *s, 
+static void save_move(MoveList *list, const GameState *s, 
                              int path[], int captured[], int depth, int is_lady) {
     if (list->count >= MAX_MOVES) return;
+    if (depth > 11) depth = 11; // Safety cap
     
     Move *m = &list->moves[list->count++];
     for (int i = 0; i <= depth; i++) {

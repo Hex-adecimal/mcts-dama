@@ -56,15 +56,52 @@ void arena_free(Arena *a);
  * Configuration parameters for the MCTS algorithm.
  * Allows tuning the search behavior without recompiling.
  */
+// Forward declaration
+typedef struct Node Node;
+
+typedef enum {
+    SOLVED_NONE = 0,
+    SOLVED_WIN = 1,   // Current player wins from this node
+    SOLVED_LOSS = -1, // Current player loses from this node
+    SOLVED_DRAW = 2   // Proven draw
+} SolverStatus;
+
 typedef struct {
     double ucb1_c;           // Exploration constant (e.g., 1.414). Higher = more exploration.
     double rollout_epsilon;  // Probability of choosing a random move during rollout (Epsilon-Greedy).
     double draw_score;       // Score assigned for a draw (e.g., 0.5).
-    int expansion_threshold; // Minimum visits required before expanding a node (usually 0 or 1).
-    int use_lookahead;       // Enable 1-ply lookahead in rollout heuristic (0=disabled, 1=enabled).
+    
+    int expansion_threshold; // Minimum visits before a node is expanded.
+
     int verbose;             // Print search statistics (1=enabled, 0=quiet mode for tournaments).
+
+    int use_lookahead;       // Enable 1-ply lookahead in simulation (0=disabled, 1=enabled).
+
+
     int use_tree_reuse;      // Enable tree reuse between moves (0=disabled, 1=enabled).
+    
+    int use_ucb1_tuned;      // Enable UCB1-Tuned selection strategy (0=disabled, 1=enabled).
+    
+    int use_tt;              // Enable Transposition Table (0=disabled, 1=enabled).
+    
+    int use_solver;          // Enable MCTS-Solver (Win/Loss propagation) (0=disabled, 1=enabled).
+    
+    int use_progressive_bias;// Enable Progressive Bias (0=disabled, 1=enabled).
+    double bias_constant;    // Constant weight for Progressive Bias (e.g. 10.0).
 } MCTSConfig;
+
+/**
+ * Transposition Table to detect identical states reached via different paths.
+ * Maps Zobrist Hash -> Node Pointer.
+ * Uses a simple array of buckets with linear probing or just simple replacement.
+ */
+typedef struct {
+    Node **buckets;
+    size_t size;           // Number of buckets (power of 2)
+    size_t mask;           // size - 1
+    size_t count;          // Number of entries
+    size_t collisions;     // Statistic
+} TranspositionTable;
 
 /**
  * Statistics tracker for MCTS performance analysis.
@@ -80,7 +117,7 @@ typedef struct {
 /**
  * Represents a node in the Monte Carlo Tree Search.
  */
-typedef struct Node {
+struct Node {
     GameState state;            // The game state at this node
     Move move_from_parent;      // The move that led to this state
     int player_who_just_moved;  // The player who made the move (WHITE/BLACK)
@@ -94,7 +131,11 @@ typedef struct Node {
     
     int visits;                 // Number of times this node has been visited
     double score;               // Accumulated score (Win=1, Draw=0.5, Loss=0)
-} Node;
+    double sum_sq_score;        // Sum of squared scores (for Variance calculation in UCB1-Tuned)
+    double heuristic_score;     // Static evaluation score for Progressive Bias
+    
+    int8_t status;              // SolverStatus: NONE, WIN, LOSS, DRAW
+};
 
 
 // ================================================================================================

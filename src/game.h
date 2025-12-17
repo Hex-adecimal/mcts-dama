@@ -45,7 +45,7 @@ typedef struct {
 } Move;
 
 // Static list to avoid malloc
-#define MAX_MOVES 128 
+#define MAX_MOVES 64 
 typedef struct {
     Move moves[MAX_MOVES];
     int count;
@@ -64,7 +64,11 @@ typedef struct {
     Color current_player; // The side to move next
 
     int moves_without_captures; // Counter for the 40-move draw rule
+    
+    uint64_t hash; // Zobrist Hash of the state
 } GameState;
+
+void zobrist_init(); // Initializes random keys
 
 // --- GLOBAL CONSTANTS ---
 
@@ -143,6 +147,10 @@ static inline void add_move(MoveList *list, int from, int to, int cap) {
  * Initializes the game state.
  * Sets up the board with pieces in their starting positions and sets the turn to White.
  * @param state Pointer to the GameState structure to initialize.
+ */
+/**
+ * Initializes the game state to the standard starting position.
+ * @param state Pointer to the GameState to initialize.
  */
 void init_game(GameState *state);
 
