@@ -8,10 +8,15 @@
 #include "params.h"
 
 /*
-*    TODO: Implementare lo Zobrist Hashing
-*    TODO: Migliorare il Rollout
-*    TODO: Multithreading
-*    TODO: CLI
+*   TODO: Tree Policy Enhancement
+        - Bandit Based 
+        - Selection (Transposition Table)
+        - AMAF (??)
+        - Game Theoretic (??)
+        - Move Pruning (??)
+        - Simulation (Rule Based Simulation)
+        - Backpropagation 
+        - Parallelisation        
 */
 
 

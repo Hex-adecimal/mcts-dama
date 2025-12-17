@@ -12,7 +12,7 @@
 #define WEIGHT_DANGER     200 // Penalty for moves that leave pieces exposed to capture
 
 // Configurazione spazio-tempo
-#define ARENA_SIZE ((size_t)2048*2 * 1024 * 1024)
+#define ARENA_SIZE ((size_t)4096*2 * 1024 * 1024)
 #define ANYTIME 0.2
 #define TIME_WHITE 0.5
 #define TIME_BLACK 0.5 
