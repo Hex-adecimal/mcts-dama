@@ -4,6 +4,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "game.h"
 #include "mcts.h"
 #include "params.h"
@@ -136,11 +140,14 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
 int main() {
     srand(time(NULL));
     
-    // Initialize Arena
-    Arena mcts_arena;
-    arena_init(&mcts_arena, ARENA_SIZE);
+    printf("=== MCTS TOURNAMENT: Config A vs Config B ===\n");
     
-    printf("=== MCTS TOURNAMENT: Config A vs Config B ===\n\n");
+#ifdef _OPENMP
+    int max_threads = omp_get_max_threads();
+    printf("OpenMP Enabled: Using up to %d threads\n\n", max_threads);
+#else
+    printf("OpenMP Disabled: Running sequentially\n\n");
+#endif
     
     // Define two configurations to compare
     MCTSConfig config_A = {
@@ -179,83 +186,144 @@ int main() {
     
     printf("Playing %d games...\n\n", num_games);
     
-    // Play tournament
+    // Store results for each game
+    int *winners = (int*)malloc(num_games * sizeof(int));
+    MCTSStats *game_stats_A = (MCTSStats*)calloc(num_games, sizeof(MCTSStats));
+    MCTSStats *game_stats_B = (MCTSStats*)calloc(num_games, sizeof(MCTSStats));
+    
+    // Play tournament in parallel
+    #pragma omp parallel for schedule(dynamic) default(shared)
     for (int game = 0; game < num_games; game++) {
+        // Each thread needs its own arena to avoid race conditions
+        Arena thread_arena;
+        arena_init(&thread_arena, ARENA_SIZE);
+        
+        // Each thread needs its own random seed
+        unsigned int seed = time(NULL) ^ (game * 1000);
+        #ifdef _OPENMP
+        seed ^= omp_get_thread_num();
+        #endif
+        srand(seed);
+        
+        // Thread-local stats for this game
+        MCTSStats local_stats_A = {0, 0, 0, 0.0, 0};
+        MCTSStats local_stats_B = {0, 0, 0, 0.0, 0};
+        
         int winner;
         
         // Alternate colors
         if (game % 2 == 0) {
             // A plays White, B plays Black
-            printf("Game %d: A(White) vs B(Black) ... ", game + 1);
-            fflush(stdout);
-            winner = play_match(&config_A, &config_B, &mcts_arena, &stats_A, &stats_B);
+            winner = play_match(&config_A, &config_B, &thread_arena, &local_stats_A, &local_stats_B);
+        } else {
+            // B plays White, A plays Black
+            winner = play_match(&config_B, &config_A, &thread_arena, &local_stats_B, &local_stats_A);
+            // Adjust winner perspective (we want it from A's viewpoint)
+            if (winner == WHITE) winner = BLACK;
+            else if (winner == BLACK) winner = WHITE;
+        }
+        
+        // Store results
+        winners[game] = winner;
+        game_stats_A[game] = local_stats_A;
+        game_stats_B[game] = local_stats_B;
+        
+        // Print progress (thread-safe)
+        #pragma omp critical
+        {
+            #ifdef _OPENMP
+            int tid = omp_get_thread_num();
+            printf("Game %d [Thread %d]: ", game + 1, tid);
+            #else
+            printf("Game %d: ", game + 1);
+            #endif
             
+            if (game % 2 == 0) {
+                printf("A(White) vs B(Black) - ");
+            } else {
+                printf("B(White) vs A(Black) - ");
+            }
+            
+            if (winner == WHITE && game % 2 == 0) printf("A wins\n");
+            else if (winner == BLACK && game % 2 == 0) printf("B wins\n");
+            else if (winner == WHITE && game % 2 == 1) printf("B wins\n");
+            else if (winner == BLACK && game % 2 == 1) printf("A wins\n");
+            else printf("Draw\n");
+            
+            fflush(stdout);
+        }
+        
+        arena_free(&thread_arena);
+    }
+    
+    // Process results sequentially to compute ELO properly
+    printf("\n=== Processing Results ===\n");
+    for (int game = 0; game < num_games; game++) {
+        int winner = winners[game];
+        
+        // Aggregate statistics
+        stats_A.total_moves += game_stats_A[game].total_moves;
+        stats_A.total_iterations += game_stats_A[game].total_iterations;
+        stats_A.total_depth += game_stats_A[game].total_depth;
+        stats_A.total_time += game_stats_A[game].total_time;
+        stats_A.total_memory += game_stats_A[game].total_memory;
+        
+        stats_B.total_moves += game_stats_B[game].total_moves;
+        stats_B.total_iterations += game_stats_B[game].total_iterations;
+        stats_B.total_depth += game_stats_B[game].total_depth;
+        stats_B.total_time += game_stats_B[game].total_time;
+        stats_B.total_memory += game_stats_B[game].total_memory;
+        
+        // Update wins/draws and ELO
+        if (game % 2 == 0) {
+            // A was White
             if (winner == WHITE) {
-                printf("A wins");
                 wins_A++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 1.0);
                 elo_B = update_elo(elo_B, exp_B, 0.0);
             } else if (winner == BLACK) {
-                printf("B wins");
                 wins_B++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 0.0);
                 elo_B = update_elo(elo_B, exp_B, 1.0);
             } else {
-                printf("Draw");
                 draws++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 0.5);
                 elo_B = update_elo(elo_B, exp_B, 0.5);
             }
         } else {
-            // B plays White, A plays Black
-            printf("Game %d: B(White) vs A(Black) ... ", game + 1);
-            fflush(stdout);
-            winner = play_match(&config_B, &config_A, &mcts_arena, &stats_B, &stats_A);
-            
+            // B was White
             if (winner == WHITE) {
-                printf("B wins ");
                 wins_B++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 0.0);
                 elo_B = update_elo(elo_B, exp_B, 1.0);
             } else if (winner == BLACK) {
-                printf("A wins ");
                 wins_A++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 1.0);
                 elo_B = update_elo(elo_B, exp_B, 0.0);
             } else {
-                printf("Draw ");
                 draws++;
-                
                 double exp_A = expected_score(elo_A, elo_B);
                 double exp_B = expected_score(elo_B, elo_A);
                 elo_A = update_elo(elo_A, exp_A, 0.5);
                 elo_B = update_elo(elo_B, exp_B, 0.5);
             }
         }
-        
-        // Print move count and averages for this game
-        int moves_this_game = (game % 2 == 0) ? 
-            (stats_A.total_moves + stats_B.total_moves - 
-             (game > 0 ? (stats_A.total_moves + stats_B.total_moves) / (game + 1) * game : 0)) :
-            (stats_B.total_moves + stats_A.total_moves - 
-             (game > 0 ? (stats_B.total_moves + stats_A.total_moves) / (game + 1) * game : 0));
-        printf("\n");
     }
+    
+    // Cleanup
+    free(winners);
+    free(game_stats_A);
+    free(game_stats_B);
     
     // Results
     printf("\n=== TOURNAMENT RESULTS ===\n");
@@ -289,6 +357,5 @@ int main() {
     printf("ELO Rating B: %.0f (Δ%+.0f)\n", elo_B, elo_B - INITIAL_ELO);
     printf("ELO Difference: %.0f points\n", fabs(elo_B - elo_A));
     
-    arena_free(&mcts_arena);
     return 0;
 }

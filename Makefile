@@ -1,5 +1,8 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Isrc
+# OpenMP support for macOS (using Homebrew's libomp)
+CFLAGS += -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
+LDFLAGS = -L/opt/homebrew/opt/libomp/lib -lomp
 TARGET = bin/dama
 OBJ_DIR = obj
 BIN_DIR = bin
@@ -22,7 +25,7 @@ TOURNAMENT_TARGET = bin/tournament
 all: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
 
 tournament: $(BIN_DIR) $(OBJ_DIR)
-	$(CC) $(CFLAGS) -o $(TOURNAMENT_TARGET) $(TOURNAMENT_SRCS) -lm
+	$(CC) $(CFLAGS) -o $(TOURNAMENT_TARGET) $(TOURNAMENT_SRCS) -lm $(LDFLAGS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -31,11 +34,11 @@ $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 # Tests target
 tests: $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $(TEST_TARGET) $(TEST_SRCS)
+	$(CC) $(CFLAGS) -o $(TEST_TARGET) $(TEST_SRCS) $(LDFLAGS)
 
 # Pattern rule for object files
 # Uses $(dir $@) to create necessary subdirectories in obj/
