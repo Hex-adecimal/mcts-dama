@@ -191,7 +191,7 @@ int main() {
             winner = play_match(&config_A, &config_B, &mcts_arena, &stats_A, &stats_B);
             
             if (winner == WHITE) {
-                printf("A wins\n");
+                printf("A wins");
                 wins_A++;
                 
                 double exp_A = expected_score(elo_A, elo_B);
@@ -199,7 +199,7 @@ int main() {
                 elo_A = update_elo(elo_A, exp_A, 1.0);
                 elo_B = update_elo(elo_B, exp_B, 0.0);
             } else if (winner == BLACK) {
-                printf("B wins\n");
+                printf("B wins");
                 wins_B++;
                 
                 double exp_A = expected_score(elo_A, elo_B);
@@ -207,7 +207,7 @@ int main() {
                 elo_A = update_elo(elo_A, exp_A, 0.0);
                 elo_B = update_elo(elo_B, exp_B, 1.0);
             } else {
-                printf("Draw\n");
+                printf("Draw");
                 draws++;
                 
                 double exp_A = expected_score(elo_A, elo_B);
