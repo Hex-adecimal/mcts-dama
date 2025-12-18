@@ -96,11 +96,11 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
                 root = reused; // Reuse opponent's subtree
             } else {
                 // Opponent's move not in our tree, create new
-                root = mcts_create_root(state, arena);
+                root = mcts_create_root(state, arena, *config);
             }
         } else {
             // First move or tree reuse disabled
-            root = mcts_create_root(state, arena);
+            root = mcts_create_root(state, arena, *config);
         }
         
         double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;
@@ -161,13 +161,15 @@ int main() {
 
     // --- CONFIGURATIONS ---
     
-    // 1. Vanilla (Baseline)
-    MCTSConfig cfg_vanilla = { .ucb1_c = UCB1_C, .rollout_epsilon = 0.2, .draw_score = DRAW_SCORE, .expansion_threshold = EXPANSION_THRESHOLD, 
-                               .use_tree_reuse = 0, .use_ucb1_tuned = 0, .use_tt = 0, .use_solver = 0, .use_progressive_bias = 0 };
+    // 1. Vanilla (Baseline: Pure Random Playouts)
+    MCTSConfig cfg_vanilla = { .ucb1_c = UCB1_C, .rollout_epsilon = 1.0, .draw_score = DRAW_SCORE, .expansion_threshold = EXPANSION_THRESHOLD, 
+                               .use_tree_reuse = 0, .use_ucb1_tuned = 0, .use_tt = 0, .use_solver = 0, .use_progressive_bias = 0,
+                               .weights = { 10.0, 5.0, 0.5, 3.0, 2.0, 2.0 } };
 
     // 2. Tuned (UCB1-Tuned)
     MCTSConfig cfg_tuned = cfg_vanilla;
     cfg_tuned.use_ucb1_tuned = 1;
+    cfg_tuned.rollout_epsilon = 0.1; // Smarter playouts
 
     // 3. TT (Transposition Table Only)
     MCTSConfig cfg_tt = cfg_vanilla;
@@ -178,9 +180,11 @@ int main() {
     cfg_solver.use_solver = 1;
 
     // 5. Bias (Progressive Bias Only - No TT as requested)
+    // Bias implies using heuristics, so we also enable smart playouts
     MCTSConfig cfg_bias = cfg_vanilla;
     cfg_bias.use_progressive_bias = 1;
     cfg_bias.bias_constant = 3.0;
+    cfg_bias.rollout_epsilon = 0.1;
 
     // 6. Ultimate (All Best Features Combined)
     MCTSConfig cfg_ultimate = cfg_vanilla;
@@ -188,6 +192,20 @@ int main() {
     cfg_ultimate.use_solver = 1;
     cfg_ultimate.use_progressive_bias = 1;
     cfg_ultimate.bias_constant = 3.0;
+    cfg_ultimate.rollout_epsilon = 0.1;
+
+    // 7. SPSA Tuned (Best Weights found)
+    MCTSConfig cfg_spsa = cfg_ultimate; // Inherit features from Ultimate
+    cfg_spsa.weights.w_capture = 10.1878;
+    cfg_spsa.weights.w_promotion = 4.9642;
+    cfg_spsa.weights.w_advance = 0.0000;
+    cfg_spsa.weights.w_center = 3.1170;
+    cfg_spsa.weights.w_edge = 1.9339;
+    cfg_spsa.weights.w_base = 3.0680;
+
+    // 8. Grandmaster (SPSA Weights + UCB1-Tuned + All Features)
+    MCTSConfig cfg_grandmaster = cfg_spsa;
+    cfg_grandmaster.use_ucb1_tuned = 1;
 
     // --- PLAYER ROSTER ---
     TournamentPlayer players[] = {
@@ -196,12 +214,14 @@ int main() {
         { "TT",       cfg_tt,       1200.0, 0, 0, 0, 0.0 },
         { "Solver",   cfg_solver,   1200.0, 0, 0, 0, 0.0 },
         { "Bias",     cfg_bias,     1200.0, 0, 0, 0, 0.0 },
-        { "Ultimate", cfg_ultimate, 1200.0, 0, 0, 0, 0.0 }
+        { "Ultimate", cfg_ultimate, 1200.0, 0, 0, 0, 0.0 },
+        { "SPSA",     cfg_spsa,     1200.0, 0, 0, 0, 0.0 },
+        { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 6;
+    int num_players = 8;
     
     int games_per_pairing = 30;
-    #define TIME_PER_MOVE 0.2
+    #define TIME_PER_MOVE 0.5
     
     double start_time = (double)clock();
     
@@ -233,8 +253,8 @@ int main() {
                 
                 // Arena per thread
                 Arena arena_A, arena_B;
-                arena_init(&arena_A, 256 * 1024 * 1024); // 128MB Safe
-                arena_init(&arena_B, 256 * 1024 * 1024);
+                arena_init(&arena_A, 1512 * 1024 * 1024); // 128MB Safe
+                arena_init(&arena_B, 1512 * 1024 * 1024);
                 
                 // MCTS Trees (No persistence)
                 Node *root_node_A = NULL;
@@ -277,7 +297,7 @@ int main() {
                     
                     if ((player == WHITE && A_is_white) || (player == BLACK && !A_is_white)) {
                         // Player A's turn
-                        if (!root_node_A) root_node_A = mcts_create_root(state, &arena_A);
+                        if (!root_node_A) root_node_A = mcts_create_root(state, &arena_A, pA->config);
                         
                         best_move = mcts_search(root_node_A, &arena_A, TIME_PER_MOVE, pA->config, &stats_A, &root_node_A);
                         
@@ -288,7 +308,7 @@ int main() {
                         }
                     } else {
                         // Player B's turn
-                        if (!root_node_B) root_node_B = mcts_create_root(state, &arena_B);
+                        if (!root_node_B) root_node_B = mcts_create_root(state, &arena_B, pB->config);
                         
                         best_move = mcts_search(root_node_B, &arena_B, TIME_PER_MOVE, pB->config, &stats_B, &root_node_B);
                         

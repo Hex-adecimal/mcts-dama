@@ -26,8 +26,8 @@ static const uint64_t PAWN_MASKS[2][2] = {
 // [Color][PieceType][Square]
 // Color: 0=White, 1=Black
 // PieceType: 0=Pawn, 1=Lady
-static uint64_t zobrist_keys[2][2][64];
-static uint64_t zobrist_black_move;
+uint64_t zobrist_keys[2][2][64];
+uint64_t zobrist_black_move;
 
 // Simple PRNG for reproducible runs
 static uint64_t rand64() {
@@ -583,4 +583,30 @@ void generate_moves(const GameState *s, MoveList *list) {
         // 3. Otherwise generate simple moves
         generate_simple_moves(s, list);
     }
+}
+
+/**
+ * Checks if a specific square is under potential attack by the opponent in the NEXT turn.
+ * Used for Safety Heuristics.
+ * @param state The state AFTER our move.
+ * @param square The square index to check.
+ * @return 1 if attacked, 0 otherwise.
+ */
+int is_square_threatened(const GameState *state, int square) {
+    // Generate all opponent moves from this state
+    MoveList enemy_moves;
+    // We can reuse generate_moves (expensive) or a lighter version.
+    // For now, use generate_moves for correctness.
+    generate_moves(state, &enemy_moves);
+    
+    for (int i = 0; i < enemy_moves.count; i++) {
+        Move *m = &enemy_moves.moves[i];
+        
+        if (m->length > 0) {
+            for (int k = 0; k < m->length; k++) {
+                if (m->captured_squares[k] == square) return 1;
+            }
+        }
+    }
+    return 0;
 }

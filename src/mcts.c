@@ -67,51 +67,49 @@ void arena_free(Arena *a) {
  * Evaluates a move based on heuristics (Promotion, Safety, Center Control).
  * Higher score = better move.
  */
-static double evaluate_move_heuristic(const GameState *state, const Move *move) {
+static double evaluate_move_heuristic(const GameState *state, const Move *move, MCTSConfig config) {
     double score = 0.0;
     int us = state->current_player;
     
     int target_idx = (move->length == 0) ? 1 : move->length;
     int from = move->path[0];
-    int to = move->path[target_idx];
+    int to   = move->path[target_idx];
     
-    int from_row = from / 8;
     int row = to / 8;
     int col = to % 8;
+    int from_row = from / 8;
 
-    // 1. Capture Bonus (huge) - Covered by rules usually, but if choice exists:
+    // 1. Capture Bonus
     if (move->length > 0) {
-        score += 10.0 * move->length; // Prioritize more captures
+        score += config.weights.w_capture * move->length; 
     }
 
     // 2. Promotion Bonus
     if (!move->is_lady_move) {
         if (row == 0 || row == 7) { // Reaching end
-            score += WEIGHT_PROMOTION;
+            score += config.weights.w_promotion;
         }
         
         // Advancement Bonus
-        // White moves UP (towards 7), Black moves DOWN (towards 0)
         int dist = (us == WHITE) ? (7 - row) : row;
-        score += (7 - dist) * WEIGHT_ADVANCE;
+        score += (7 - dist) * config.weights.w_advance;
     }
 
-    // 3. Safety Bonus (Edges)
-    if (col == 0 || col == 7) {
-        score += WEIGHT_SAFE_EDGE;
+    // 3. Safety Bonus (Edges) - ONLY for regular pieces, not queens
+    // Queens should stay active in the center, not hide in corners
+    if (!move->is_lady_move && (col == 0 || col == 7)) {
+        score += config.weights.w_edge;
     }
 
-    // 4. Center Control (New!)
-    // Rows 3,4 and Cols 2,3,4,5 are critical.
+    // 4. Center Control
     if ((row == 3 || row == 4) && (col >= 2 && col <= 5)) {
-        score += 3.0; 
+        score += config.weights.w_center; 
     }
 
     // 5. Base Protection (Penalty)
-    // Avoid moving from base rank (0 for White, 7 for Black) unless necessary
     if (!move->is_lady_move) {
          if ((us == WHITE && from_row == 0) || (us == BLACK && from_row == 7)) {
-             score -= WEIGHT_BASE_BREAK;
+             score -= config.weights.w_base;
          }
     }
     
@@ -130,7 +128,7 @@ static double evaluate_move_heuristic(const GameState *state, const Move *move) 
  * @param arena Pointer to the arena for allocation.
  * @return Pointer to the new Node.
  */
-static Node* create_node(Node *parent, Move move, GameState state, Arena *arena) {
+static Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSConfig config) {
     Node *node = (Node*)arena_alloc(arena, sizeof(Node));
     
     node->state = state;
@@ -163,7 +161,18 @@ static Node* create_node(Node *parent, Move move, GameState state, Arena *arena)
     
     // HEURISTIC INIT (Progressive Bias)
     if (parent) {
-        node->heuristic_score = evaluate_move_heuristic(&parent->state, &move);
+        node->heuristic_score = evaluate_move_heuristic(&parent->state, &move, config);
+        
+        // Dynamic Threat Check (only if weight > 0) to avoid overhead
+        if (config.weights.w_threat > 0.0) {
+            // Determine destination square
+            int dest = (move.length == 0) ? move.path[1] : move.path[move.length];
+            
+            // Check if this piece is immediately threatened in the new state
+            if (is_square_threatened(&node->state, dest)) {
+                node->heuristic_score -= config.weights.w_threat;
+            }
+        }
     } else {
         node->heuristic_score = 0.0;
     }
@@ -177,9 +186,16 @@ static Node* create_node(Node *parent, Move move, GameState state, Arena *arena)
  * @param m2 Second move.
  * @return 1 if moves are equal, 0 otherwise.
  */
+// Helper to compare moves
 static int moves_equal(const Move *m1, const Move *m2) {
     if (m1->length != m2->length) return 0;
-    for (int i = 0; i <= m1->length; i++) {
+    
+    // For simple moves (len=0), path has 2 elements (start, end).
+    // For captures (len>0), path has len+1 elements.
+    // If len=0, we must check index 0 AND index 1.
+    int limit = (m1->length == 0) ? 1 : m1->length;
+
+    for (int i = 0; i <= limit; i++) {
         if (m1->path[i] != m2->path[i]) return 0;
     }
     return 1;
@@ -228,21 +244,31 @@ static void tt_free(TranspositionTable *tt) {
     }
 }
 
-static Node* tt_lookup(TranspositionTable *tt, uint64_t hash) {
+// Helper to compare states fully
+int states_equal(const GameState *s1, const GameState *s2) {
+    if (s1->white_pieces != s2->white_pieces) return 0;
+    if (s1->black_pieces != s2->black_pieces) return 0;
+    if (s1->white_ladies != s2->white_ladies) return 0;
+    if (s1->black_ladies != s2->black_ladies) return 0;
+    if (s1->current_player != s2->current_player) return 0;
+    // moves_without_captures affects Draw rule, so it matters for state identity
+    if (s1->moves_without_captures != s2->moves_without_captures) return 0;
+    return 1;
+}
+
+static Node* tt_lookup(TranspositionTable *tt, const GameState *state) {
     if (!tt) return NULL;
-    size_t idx = hash & tt->mask;
+    size_t idx = state->hash & tt->mask;
     
     // Simple direct lookup for now (soft collision handling: just overwrite/ignore)
     // For a real robust implementation we would do probing.
-    // If we overwrite, we lose the old node reference in the TT (but valid in Arena).
-    // Let's check if the node at idx matches the hash.
-    // BUT we don't store the full hash in the Node... we store the state.
     
     Node *node = tt->buckets[idx];
-    if (node && node->state.hash == hash) {
+    if (node && node->state.hash == state->hash) {
         // Double check full state equality to be safe (hash collisions are rare but possible)
-        // For Dama 64-bit Zobrist, collision is very unlikely.
-        return node;
+        if (states_equal(&node->state, state)) {
+            return node;
+        }
     }
     return NULL; 
 }
@@ -252,8 +278,6 @@ static void tt_insert(TranspositionTable *tt, Node *node) {
     size_t idx = node->state.hash & tt->mask;
     
     // Always overwrite (Replacement scheme: Always Replace)
-    // Ideally we might keep the one with more visits?
-    // For expansion, strict consistency matters.
     if (tt->buckets[idx] != NULL) tt->collisions++;
     tt->buckets[idx] = node;
     tt->count++;
@@ -265,7 +289,7 @@ static void tt_insert(TranspositionTable *tt, Node *node) {
  * @param arena Pointer to the arena.
  * @return Pointer to the newly created child node.
  */
-static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt) {
+static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config) {
     if (node->untried_moves.count == 0) return node; // Should not happen if checked before
 
     // Pop the last move from untried_moves (efficient)
@@ -282,15 +306,11 @@ static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt) {
     Node *child = NULL;
     
     if (tt) {
-        // Calculate hash is already done in init_game/apply_move for the state?
-        // Wait, apply_move updates hash? Yes.
-        // But we computed next_state above.
-        // apply_move in game.c updates the hash in the state struct!
-        child = tt_lookup(tt, next_state.hash);
+        child = tt_lookup(tt, &next_state);
     }
     
     if (!child) {
-        child = create_node(node, move_to_try, next_state, arena);
+        child = create_node(node, move_to_try, next_state, arena, config);
         if (tt) tt_insert(tt, child);
     } else {
         // Found in TT (Transposition)
@@ -299,9 +319,9 @@ static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt) {
              // We found a node that is already solved!
              // This is great info.
         }
-        child = create_node(node, move_to_try, next_state, arena);
+        child = create_node(node, move_to_try, next_state, arena, config);
         
-        Node *match = tt_lookup(tt, next_state.hash);
+        Node *match = tt_lookup(tt, &next_state);
         if (match) {
             // Warm-start this node with stats from the transposition!
             // This is "Transposition Table initialization".
@@ -459,7 +479,7 @@ static Node* select_promising_node(Node *root, MCTSConfig config) {
  * Gives bonuses for promotion, safety, etc.
  * Optionally uses 1-ply lookahead to avoid dangerous moves.
  */
-static Move pick_smart_move(const MoveList *list, const GameState *state, int use_lookahead) {
+static Move pick_smart_move(const MoveList *list, const GameState *state, int use_lookahead, MCTSConfig config) {
     if (list->count == 1) return list->moves[0];
 
     int best_score = -100000;
@@ -474,7 +494,7 @@ static Move pick_smart_move(const MoveList *list, const GameState *state, int us
         if (m.length > 0) score += 1000 * m.length;
         
         // Use shared heuristic function
-        score += (int)evaluate_move_heuristic(state, &m);
+        score += (int)evaluate_move_heuristic(state, &m, config);
 
         // Danger Check (1-ply lookahead)
         // Only check for simple moves (captures are usually good)
@@ -550,7 +570,7 @@ static double simulate_rollout(Node *node, MCTSConfig config) {
             int random_idx = rand() % temp_moves.count;
             chosen_move = temp_moves.moves[random_idx];
         } else {
-            chosen_move = pick_smart_move(&temp_moves, &temp_state, config.use_lookahead);
+            chosen_move = pick_smart_move(&temp_moves, &temp_state, config.use_lookahead, config);
         }
 
         apply_move(&temp_state, &chosen_move);
@@ -604,7 +624,7 @@ static void backpropagate(Node *node, double result, int use_solver) {
     while (node != NULL) {
         node->visits++;
         
-        // Add Result
+        // Add Result (from this node's player perspective)
         node->score += result;
         node->sum_sq_score += (result * result);
 
@@ -615,6 +635,11 @@ static void backpropagate(Node *node, double result, int use_solver) {
             }
         }
 
+        // CRITICAL: Flip perspective for the parent node!
+        // In a two-player game, if this node's player won (result=1),
+        // that means the parent's player lost (result=0), and vice versa.
+        result = 1.0 - result;
+
         child = node; // Move up
         node = node->parent;
     }
@@ -624,9 +649,9 @@ static void backpropagate(Node *node, double result, int use_solver) {
 //  PUBLIC API
 // ================================================================================================
 
-Node* mcts_create_root(GameState state, Arena *arena) {
+Node* mcts_create_root(GameState state, Arena *arena, MCTSConfig config) {
     Move no_move = {0};
-    return create_node(NULL, no_move, state, arena);
+    return create_node(NULL, no_move, state, arena, config);
 }
 
 /**
@@ -671,7 +696,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
         
         // 2. Expansion
         if (!leaf->is_terminal) {
-            leaf = expand_node(leaf, arena, tt); 
+            leaf = expand_node(leaf, arena, tt, config); 
         }
 
         // 3. Simulation

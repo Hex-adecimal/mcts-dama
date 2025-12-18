@@ -88,6 +88,17 @@ typedef struct {
     
     int use_progressive_bias;// Enable Progressive Bias (0=disabled, 1=enabled).
     double bias_constant;    // Constant weight for Progressive Bias (e.g. 10.0).
+
+    // --- Dynamic Heuristic Weights ---
+    struct {
+        double w_capture;    // Multiplier for number of captures (e.g. 10.0)
+        double w_promotion;  // Bonus for promotion (e.g. 5.0)
+        double w_advance;    // Bonus for advancing (e.g. 0.5)
+        double w_center;     // Bonus for center control (e.g. 3.0)
+        double w_edge;       // Bonus for edge safety (e.g. 2.0)
+        double w_base;       // Penalty for breaking base (e.g. 2.0)
+        double w_threat;     // Penalty for moving to a threatened square (e.g. 200.0)
+    } weights;
 } MCTSConfig;
 
 /**
@@ -148,7 +159,7 @@ struct Node {
  * @param arena Pointer to the arena allocator.
  * @return Pointer to the newly created root node.
  */
-Node* mcts_create_root(GameState state, Arena *arena);
+Node* mcts_create_root(GameState state, Arena *arena, MCTSConfig config);
 
 /**
  * Executes the MCTS search algorithm.
@@ -183,5 +194,12 @@ Node* find_child_by_move(Node *parent, const Move *move);
  * @return Maximum depth of the tree.
  */
 int get_tree_depth(Node *node);
+
+// Debug / Viz
+void print_tree_summary(Node *root);
+Node* find_child_by_move(Node *parent, const Move *move);
+
+// Helper to compare two states for exact equality
+int states_equal(const GameState *s1, const GameState *s2);
 
 #endif // MCTS_H

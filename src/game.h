@@ -148,6 +148,16 @@ static inline void add_move(MoveList *list, int from, int to, int cap) {
  * Sets up the board with pieces in their starting positions and sets the turn to White.
  * @param state Pointer to the GameState structure to initialize.
  */
+// ZOBRIST HASHING
+extern uint64_t zobrist_keys[2][2][64]; // [Color][Type][Square]
+extern uint64_t zobrist_black_move;
+
+/**
+ * Initializes Zobrist keys with random values.
+ * Should be called once at startup.
+ */
+void zobrist_init();
+
 /**
  * Initializes the game state to the standard starting position.
  * @param state Pointer to the GameState to initialize.
@@ -193,5 +203,13 @@ void apply_move(GameState *state, const Move *move);
  * @param list Pointer to the MoveList to populate.
  */
 void generate_moves(const GameState *s, MoveList *list);
+
+/**
+ * Checks if a specific square is under potential attack by the opponent in the NEXT turn.
+ * @param state The state AFTER our move.
+ * @param square The square index to check.
+ * @return 1 if attacked, 0 otherwise.
+ */
+int is_square_threatened(const GameState *state, int square);
 
 #endif // GAME_H

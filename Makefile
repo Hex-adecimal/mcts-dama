@@ -37,8 +37,15 @@ TOURNAMENT_TARGET = bin/tournament
 
 all: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
 
+# Convenience alias for user habit (come ti permetti O.O)
+main: all
+.PHONY: main
+
 tournament: $(BIN_DIR) $(OBJ_DIR)
 	$(CC) $(CFLAGS) -o $(TOURNAMENT_TARGET) $(TOURNAMENT_SRCS) -lm $(LDFLAGS)
+
+tuner: $(BIN_DIR) $(OBJ_DIR)
+	$(CC) $(CFLAGS) -o bin/tuner main_tuner.c src/game.c src/mcts.c -lm $(LDFLAGS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
