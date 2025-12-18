@@ -535,8 +535,15 @@ static double simulate_rollout(Node *node, MCTSConfig config) {
 
         if (temp_moves.count == 0) {
             int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;
-            if (winner == node->player_who_just_moved) return WIN_SCORE;
-            else return LOSS_SCORE;
+            if (winner == node->player_who_just_moved) {
+                double score = WIN_SCORE;
+                if (config.use_decaying_reward) {
+                    score *= pow(config.decay_factor, depth);
+                }
+                return score;
+            } else {
+                return LOSS_SCORE;
+            }
         }
         
         if (temp_state.moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) {

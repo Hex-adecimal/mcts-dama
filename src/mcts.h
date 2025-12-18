@@ -58,6 +58,10 @@ typedef struct {
     int use_fpu;
     double fpu_value;
     
+    // Decaying Reward (Plugin)
+    int use_decaying_reward;
+    double decay_factor;
+
     // Heuristic Weights (for rollout policy)
     struct {
         double w_capture;
@@ -140,11 +144,6 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
 Node* find_child_by_move(Node *parent, const Move *move);
 int get_tree_depth(Node *node);
 int states_equal(const GameState *s1, const GameState *s2);
-
-// Debug / Stats Helper
-// double mcts_get_avg_root_ucb(Node *root, MCTSConfig config); // Moved to debug.h
-
-// Core functions exposed for debug/tools
 double calculate_ucb1_score(Node *child, MCTSConfig config);
 
 #endif // MCTS_H

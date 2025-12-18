@@ -16,6 +16,10 @@
 // Updated to 100.0 to be "Optimistic" (higher than typical UCB ~1.0-2.0) but not infinite.
 #define FPU_VALUE           100.0
 
+// Decaying Reward: Discount factor for rewards based on simulation depth.
+// 0.99 means reward decays by 1% per move in rollout. Encourages fast wins.
+#define DEFAULT_DECAY_FACTOR 0.99
+
 // =============================================================================
 // MCTS DEFAULTS
 // =============================================================================

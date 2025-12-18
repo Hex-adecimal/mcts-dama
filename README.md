@@ -39,7 +39,7 @@ Structured according to *Browne et al. (2012) MCTS Survey*.
 - [x] **Zobrist Hashing**: Implement incremental hashing to identify unique board states .
 - [x] **Transposition Table (DAG)**: Map identical states reached via different paths .
 - [x] **Progressive Bias**: Domain-specific heuristic knowledge added to UCB formula . (Implemented, currently disabled).
-- [x] **First Play Urgency (FPU)**: Assign fixed high value to unvisited nodes to encourage early exploitation (Section 5.2.1). (Implemented as plugin).
+- [x] **First Play Urgency (FPU)**: Assign fixed high value to unvisited nodes to encourage early exploitation .
 - [ ] **Decisive Moves**: Immediately play moves that lead to a win or prevent an immediate loss .
 - [ ] **Opening Books**: Use expert opening databases or MCTS-generated books to guide early play .
 - [ ] **Search Seeding**: Initialize node statistics with heuristic knowledge instead of zero .
@@ -75,8 +75,8 @@ Structured according to *Browne et al. (2012) MCTS Survey*.
 #### Backpropagation
 
 - [x] **Transposition Table Updates**: Share statistics between different nodes corresponding to the same state (handling transpositions). Strategies like UCT1/2/3 can be explored.
-- [ ] **Decaying Reward**: Multiply reward by a constant $\gamma < 1$ between nodes to weight early wins more heavily than later wins.
-- [ ] **Score Bonus**: Backpropagate values in intervals $[0, \phi]$ for loss and $[\phi, 1]$ for win to distinguish between strong and weak wins/losses.
+- [x] **Decaying Reward**: Multiply reward by a constant $\gamma < 1$ between nodes to weight early wins more heavily than later wins. (Implemented as plugin).
+- [ ] **Score Bonus**: Add bonus to simulation result for short wins or long losses. and $[\phi, 1]$ for win to distinguish between strong and weak wins/losses.
 - [ ] **Weighting Simulation Results**: Weight simulations based on duration or timing (e.g., later/shorter simulations are often more accurate).
 
 #### Parallelisation

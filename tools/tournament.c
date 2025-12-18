@@ -177,25 +177,33 @@ int main() {
     // 3. TT (Transposition Table Only) - EXCLUDED
     // 4. Solver (Solver Only) - EXCLUDED
 
-    // 5. Bias (Progressive Bias) - EXCLUDED
+    // 5. Bias (Progressive Bias) - EXCLUDED (but config kept for reference)
     // MCTSConfig cfg_bias = cfg_vanilla; ...
 
-    // 6. Grandmaster (Best Configuration Found: TT + Solver + UCB1-Tuned + Random Rollout + FPU)
+    // 5.5 Decaying Reward (Plugin)
+    MCTSConfig cfg_decay = cfg_vanilla;
+    cfg_decay.use_decaying_reward = 1;
+    cfg_decay.decay_factor = DEFAULT_DECAY_FACTOR;
+
+    // 6. Grandmaster (Best Configuration + FPU + Decay)
     MCTSConfig cfg_grandmaster = cfg_vanilla;
     cfg_grandmaster.use_tt = 1;
     cfg_grandmaster.use_solver = 1;
     cfg_grandmaster.use_ucb1_tuned = 1;
     cfg_grandmaster.use_fpu = 1;
     cfg_grandmaster.fpu_value = FPU_VALUE;
+    cfg_grandmaster.use_decaying_reward = 1;
+    cfg_grandmaster.decay_factor = DEFAULT_DECAY_FACTOR;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
     // --- PLAYER ROSTER (Reduced) ---
     TournamentPlayer players[] = {
         { "Vanilla",  cfg_vanilla,  1200.0, 0, 0, 0, 0.0 },
-        { "FPU-Opt",  cfg_fpu,      1200.0, 0, 0, 0, 0.0 }, // Renamed to FPU-Opt to indicate 100.0
+        { "FPU-Opt",  cfg_fpu,      1200.0, 0, 0, 0, 0.0 },
+        { "Decay",    cfg_decay,    1200.0, 0, 0, 0, 0.0 },
         { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 3;
+    int num_players = 4;
     
     int games_per_pairing = GAMES_PER_PAIRING;
     #define TIME_PER_MOVE TIME_TOURNAMENT

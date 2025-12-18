@@ -115,6 +115,8 @@ int main() {
         .bias_constant = DEFAULT_BIAS_CONSTANT,
         .use_fpu = 1,
         .fpu_value = FPU_VALUE,
+        .use_decaying_reward = 1,
+        .decay_factor = DEFAULT_DECAY_FACTOR,
         .weights = { 
             .w_capture = W_CAPTURE, 
             .w_promotion = W_PROMOTION, 
