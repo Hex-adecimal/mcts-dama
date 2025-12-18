@@ -51,6 +51,8 @@ int main() {
     cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.use_decaying_reward = 1;
     cfg_grandmaster.decay_factor = DEFAULT_DECAY_FACTOR;
+    cfg_grandmaster.use_progressive_bias = 1;
+    cfg_grandmaster.bias_constant = DEFAULT_BIAS_CONSTANT;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
     int wins_gm = 0, wins_vanilla = 0, draws = 0;

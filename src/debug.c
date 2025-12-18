@@ -1,6 +1,7 @@
 #include "debug.h"
 #include "mcts.h"
 #include <stdio.h>
+#include <stdlib.h> // for qsort
 
 /**
  * Calculates average UCB value of all children of the root.
@@ -98,12 +99,56 @@ void print_move_list(MoveList *list) {
  * Prints a human-readable description of a move.
  */
 void print_move_description(Move m) {
-    int target_idx = (m.length == 0) ? 1 : m.length;
+    print_coords(m.path[0]);
     
-    printf("%c%d -> %c%d", 
-           (m.path[0]%8)+'A', (m.path[0]/8)+1,
-           (m.path[target_idx]%8)+'A', (m.path[target_idx]/8)+1);
-           
-    if (m.length > 0) printf(" (CAPTURE)");
-    printf("\n");
+    if (m.length == 0) {
+        printf("-");
+        print_coords(m.path[1]);
+    } else {
+        for (int i=0; i<m.length; i++) {
+            printf("x");
+            print_coords(m.path[i+1]); // Capture destination
+        }
+    }
+}
+
+// Compare function for qsort
+int compare_nodes_visits_desc(const void *a, const void *b) {
+    Node *nodeA = *(Node **)a;
+    Node *nodeB = *(Node **)b;
+    return nodeB->visits - nodeA->visits; // Descending order
+}
+
+/**
+ * Prints debug info for root children, SORTED by visit count.
+ */
+void print_mcts_stats_sorted(Node *root) {
+    if (!root || root->num_children == 0) {
+        printf("No children statistics available.\n");
+        return;
+    }
+
+    // Create a temporary array of pointers to sort without modifying the tree order
+    Node **sorted_children = malloc(root->num_children * sizeof(Node*));
+    if (!sorted_children) return;
+
+    for (int i=0; i<root->num_children; i++) {
+        sorted_children[i] = root->children[i];
+    }
+
+    qsort(sorted_children, root->num_children, sizeof(Node*), compare_nodes_visits_desc);
+
+    printf("--- Root Children Stats (Sorted by Visits) ---\n");
+    for (int i = 0; i < root->num_children; i++) {
+        Node *child = sorted_children[i];
+        printf("Move: ");
+        print_move_description(child->move_from_parent);
+        
+        double win_rate = (child->visits > 0) ? (child->score / child->visits) : 0.0;
+        printf(" | Visits: %d | Score: %.1f | WinRate: %.1f%% | Status: %d\n", 
+               child->visits, child->score, win_rate * 100.0, child->status);
+    }
+    printf("----------------------------------------------\n");
+
+    free(sorted_children);
 }

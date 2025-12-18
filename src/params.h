@@ -5,20 +5,26 @@
 // UCB1 & SCORING
 // =============================================================================
 
-#define UCB1_C              1.414
+// =============================================================================
+// UCB1 & SCORING
+// =============================================================================
+
+// =============================================================================
+// UCB1 & SCORING
+// =============================================================================
+
+#define UCB1_C              1.30  // Tuned - Base is sqrt(2)
 #define WIN_SCORE           1.0
 #define DRAW_SCORE          0.25
 #define LOSS_SCORE          0.0
 
 // First Play Urgency (FPU): Value assigned to unvisited nodes.
 // If too high (1e9), forces full width exploration (breadth-first locally).
-// If lower (e.g. 1.1), allows exploiting good nodes before visiting all siblings.
-// Updated to 100.0 to be "Optimistic" (higher than typical UCB ~1.0-2.0) but not infinite.
 #define FPU_VALUE           100.0
 
 // Decaying Reward: Discount factor for rewards based on simulation depth.
-// 0.99 means reward decays by 1% per move in rollout. Encourages fast wins.
-#define DEFAULT_DECAY_FACTOR 0.99
+// 0.999 means reward decays by .1% per move in rollout. Encourages fast wins.
+#define DEFAULT_DECAY_FACTOR 0.999
 
 // =============================================================================
 // MCTS DEFAULTS
@@ -31,7 +37,7 @@
 #define EXPANSION_THRESHOLD      0
 #define DEFAULT_USE_LOOKAHEAD    1
 #define DEFAULT_TREE_REUSE       1
-#define DEFAULT_BIAS_CONSTANT    3.0
+#define DEFAULT_BIAS_CONSTANT    1.2  // Tuned (Run 2). Note: Progressive Bias disabled in GM by default.
 
 // =============================================================================
 // LIMITS
@@ -74,14 +80,14 @@
 // These are the optimized weights from SPSA tuning with corrected MCTS.
 // Used by main.c and can be used as starting point for tuner.c.
 
-#define W_CAPTURE           9.86
-#define W_PROMOTION         4.81
-#define W_ADVANCE           0.43
-#define W_CENTER            2.45
-#define W_EDGE              1.59
-#define W_BASE              1.13
-#define W_THREAT            9.49
-#define W_LADY_ACTIVITY     4.65
+#define W_CAPTURE           9.85
+#define W_PROMOTION         4.89
+#define W_ADVANCE           1.36  // Significant increase (was 0.43)
+#define W_CENTER            2.31
+#define W_EDGE              0.90  // Significant decrease (was 1.59)
+#define W_BASE              1.53  // Increased
+#define W_THREAT            9.74
+#define W_LADY_ACTIVITY     5.12
 
 // Legacy weight (used in rollout danger check)
 #define WEIGHT_DANGER       200

@@ -9,7 +9,7 @@
 #include "params.h"
 
 // Tuner Configuration
-#define SPSA_ITERATIONS 100
+#define SPSA_ITERATIONS 200
 #define GAMES_PER_ITERATION 20 // 10 pairs
 
 // Matches main_tournament.c structure
@@ -59,17 +59,24 @@ int main() {
     init_move_tables();
     srand(time(NULL));
 
-    // Initial Parameters (8 weights)
-    double theta[8] = { W_CAPTURE, W_PROMOTION, W_ADVANCE, W_CENTER, W_EDGE, W_BASE, W_THREAT, W_LADY_ACTIVITY };
-    char *names[8]  = { "Capture", "Promotion", "Advance", "Center", "Edge", "Base", "Threat", "LadyActivity" };
+    // Optimize ONLY 8 Heuristic Weights
+    #define NUM_PARAMS 8
+    // Initial weights from params.h
+    double theta[NUM_PARAMS] = { 
+        W_CAPTURE, W_PROMOTION, W_ADVANCE, W_CENTER, W_EDGE, W_BASE, W_THREAT, W_LADY_ACTIVITY
+    };
+    char *names[NUM_PARAMS]  = { 
+        "Capture", "Promotion", "Advance", "Center", "Edge", "Base", "Threat", "LadyActivity"
+    };
 
-    printf("=== SPSA Tuner Started ===\n");
-    printf("Initial Weights: Cap=%.2f, Prom=%.2f, Adv=%.2f, Cen=%.2f, Edg=%.2f, Bas=%.2f, Thr=%.2f, Lady=%.2f\n",
+    printf("=== SPSA Tuner (Weights Only) Started ===\n");
+    // Print initial
+    printf("Init: Cap=%.2f, Prom=%.2f, Adv=%.2f, Cen=%.2f, Edg=%.2f, Bas=%.2f, Thr=%.2f, Lady=%.2f\n",
            theta[0], theta[1], theta[2], theta[3], theta[4], theta[5], theta[6], theta[7]);
 
-    double a = 2.0; // Step size
-    double c = 1.0; // Perturbation
-    double A = 10.0;
+    double a = 4.0; // Step size
+    double c = 2.0; // Perturbation (High for weights ~1-10)
+    double A = 20.0;
     double alpha = 0.602;
     double gamma = 0.101;
 
@@ -77,28 +84,37 @@ int main() {
         double ak = a / pow(k + A, alpha);
         double ck = c / pow(k, gamma);
 
-        // Bernoulli vector (+1/-1)
-        double delta[8];
-        for(int i=0; i<8; i++) delta[i] = (rand() % 2 == 0) ? 1.0 : -1.0;
+        // Bernoulli vector
+        double delta[NUM_PARAMS];
+        for(int i=0; i<NUM_PARAMS; i++) delta[i] = (rand() % 2 == 0) ? 1.0 : -1.0;
 
-        // Theta Plus / Minus
-        MCTSConfig cfg_plus, cfg_minus;
-        // Base config: Tuned + Bias + Heuristics
-        MCTSConfig base = { .ucb1_c = UCB1_C, .rollout_epsilon = ROLLOUT_EPSILON_SMART, .expansion_threshold = EXPANSION_THRESHOLD,
-                            .use_progressive_bias = 1, .bias_constant = DEFAULT_BIAS_CONSTANT, .use_ucb1_tuned = 1 };
+        // Base Config: Grandmaster Structure (Fixed)
+        MCTSConfig base = { 
+            .ucb1_c = UCB1_C, // 1.30
+            .rollout_epsilon = ROLLOUT_EPSILON_RANDOM, 
+            .expansion_threshold = EXPANSION_THRESHOLD,
+            .use_progressive_bias = 1, 
+            .bias_constant = DEFAULT_BIAS_CONSTANT, // 1.2
+            .use_ucb1_tuned = 1,
+            .use_tt = 1,
+            .use_solver = 1,
+            .use_fpu = 1,
+            .fpu_value = FPU_VALUE, // 100.3
+            .use_decaying_reward = 1,
+            .decay_factor = DEFAULT_DECAY_FACTOR // 0.999
+        };
         
-        cfg_plus = base;
-        cfg_minus = base;
+        MCTSConfig cfg_plus = base;
+        MCTSConfig cfg_minus = base;
 
-        for(int i=0; i<8; i++) {
-            double p_val = theta[i] + ck * delta[i];
-            double m_val = theta[i] - ck * delta[i];
+        for(int i=0; i<NUM_PARAMS; i++) {
+            double change = ck * delta[i];
+            double p_val = theta[i] + change;
+            double m_val = theta[i] - change;
             
-            // Safety Clamps (Weights shouldn't be negative generally)
             if (p_val < 0) p_val = 0;
             if (m_val < 0) m_val = 0;
             
-            // Assign
              switch(i) {
                 case 0: cfg_plus.weights.w_capture = p_val; cfg_minus.weights.w_capture = m_val; break;
                 case 1: cfg_plus.weights.w_promotion = p_val; cfg_minus.weights.w_promotion = m_val; break;
@@ -111,33 +127,31 @@ int main() {
             }
         }
 
-        // Play matches: Plus vs Minus
+        // Play matches
         int score_plus = 0;
         int games = GAMES_PER_ITERATION;
         
         #pragma omp parallel for reduction(+:score_plus)
         for (int g = 0; g < games; g++) {
             int winner = 0;
-            // Alternate colors
-            if (g % 2 == 0) play_game_tuner(cfg_plus, cfg_minus, &winner); // + is White
-            else            play_game_tuner(cfg_minus, cfg_plus, &winner); // - is White
+            if (g % 2 == 0) play_game_tuner(cfg_plus, cfg_minus, &winner); 
+            else            play_game_tuner(cfg_minus, cfg_plus, &winner);
 
-            // Simplified return from play_game: 1=White, -1=Black, 0=Draw
             if (g % 2 == 0) {
-                if (winner == 1) score_plus++;      // Plus Wins
-                else if (winner == -1) score_plus--; // Minus Wins
+                if (winner == 1) score_plus++;      
+                else if (winner == -1) score_plus--; 
             } else {
-                if (winner == 1) score_plus--;      // Minus Wins
-                else if (winner == -1) score_plus++; // Plus Wins
+                if (winner == 1) score_plus--;      
+                else if (winner == -1) score_plus++; 
             }
         }
         
-        double y_diff = (double)score_plus / games; // Range [-1.0, 1.0]
+        double y_diff = (double)score_plus / games;
 
-        for(int i=0; i<8; i++) {
+        for(int i=0; i<NUM_PARAMS; i++) {
             double grad = y_diff / (2.0 * ck * delta[i]);
             theta[i] += ak * grad;
-            if (theta[i] < 0) theta[i] = 0; // Keep non-negative
+            if (theta[i] < 0) theta[i] = 0;
         }
 
         printf("Iter %d: Score=%.2f. Weights: [%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f]\n", 
@@ -146,7 +160,7 @@ int main() {
     
     printf("\n=== Optimization Complete ===\n");
     printf("Final Weights:\n");
-    for(int i=0; i<8; i++) printf("  %s: %.4f\n", names[i], theta[i]);
+    for(int i=0; i<NUM_PARAMS; i++) printf("  %s: %.4f\n", names[i], theta[i]);
     
     return 0;
 }

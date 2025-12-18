@@ -111,7 +111,7 @@ int main() {
         .use_ucb1_tuned = 1,  // Enabled (Best Found: TT + Solver + UCB1-Tuned + Random Rollout)
         .use_tt = 1,
         .use_solver = 1,
-        .use_progressive_bias = 0,
+        .use_progressive_bias = 0, // Disabled based on Tournament results (GM-NoBias > GM-Full)
         .bias_constant = DEFAULT_BIAS_CONSTANT,
         .use_fpu = 1,
         .fpu_value = FPU_VALUE,
@@ -162,17 +162,18 @@ int main() {
         Move chosen_move;
 
         // --- TURN LOGIC ---
-        // --- TURN LOGIC ---
         if ((int)state.current_player == human_color) {
             // HUMAN TURN
             
             // Run MCTS for a brief moment to generate hints
-            printf("Calcolo suggerimenti (1.0s)...\n");
+            double time_limit = TIME_HIGH;
+            printf("Calcolo suggerimenti (%fs)...\n", time_limit);
             // Important: Pass NULL for out_new_root because we are NOT committing to a move yet.
             // We just want to expand the tree from the current root.
-            mcts_search(root, &mcts_arena, 1.0, config, NULL, NULL);
+            mcts_search(root, &mcts_arena, time_limit, config, NULL, NULL);
             
             display_moves(&list, root);
+            print_mcts_stats_sorted(root);
             
             int chosen_idx = -1;
             while (chosen_idx < 0 || chosen_idx >= list.count) {
@@ -208,10 +209,7 @@ int main() {
                         root = NULL;
                     }
                 } else {
-                    // printf("[DEBUG] Move not in tree. New Root needed next turn.\n");
                     root = NULL; // Opponent played unexpected move (or tree not expanded enough)
-                    // If we lose the tree, we might consider a reset if we want to reclaim memory, 
-                    // but for simplicity we just start a new root in the same arena.
                 }
             }
             
@@ -219,15 +217,10 @@ int main() {
             // AI TURN (GRANDMASTER)
              printf("Il Grandmaster sta pensando...\n");
             
-            double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;
-            time_limit += 2.0;
+            double time_limit = (state.current_player == WHITE) ? TIME_HIGH : TIME_HIGH;
             
             // Search
             chosen_move = mcts_search(root, &mcts_arena, time_limit, config, NULL, &root);
-            // mcts_search with &root will update root to the chosen child automatically if implemented!
-            // Wait, let's check mcts_search signature in mcts.c line 668:
-            // Move mcts_search(..., Node **out_new_root) { ... *out_new_root = best_child; ... }
-            // So passing &root updates 'root' to be the best child. Perfect.
             
             printf("Grandmaster gioca: ");
             // Custom print

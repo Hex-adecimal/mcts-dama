@@ -177,15 +177,16 @@ int main() {
     // 3. TT (Transposition Table Only) - EXCLUDED
     // 4. Solver (Solver Only) - EXCLUDED
 
-    // 5. Bias (Progressive Bias) - EXCLUDED (but config kept for reference)
-    // MCTSConfig cfg_bias = cfg_vanilla; ...
+    // 5. Bias (Progressive Bias)
+    MCTSConfig cfg_bias = cfg_vanilla;
+    cfg_bias.use_progressive_bias = 1;
+    cfg_bias.bias_constant = DEFAULT_BIAS_CONSTANT;
 
-    // 5.5 Decaying Reward (Plugin)
-    MCTSConfig cfg_decay = cfg_vanilla;
-    cfg_decay.use_decaying_reward = 1;
-    cfg_decay.decay_factor = DEFAULT_DECAY_FACTOR;
+    // 2. Tuned (UCB1-Tuned) configuration - Re-enabled for context
+    MCTSConfig cfg_tuned = cfg_vanilla;
+    cfg_tuned.use_ucb1_tuned = 1;
 
-    // 6. Grandmaster (Best Configuration + FPU + Decay)
+    // 6. Grandmaster (Best Configuration + FPU + Decay + Bias)
     MCTSConfig cfg_grandmaster = cfg_vanilla;
     cfg_grandmaster.use_tt = 1;
     cfg_grandmaster.use_solver = 1;
@@ -194,16 +195,23 @@ int main() {
     cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.use_decaying_reward = 1;
     cfg_grandmaster.decay_factor = DEFAULT_DECAY_FACTOR;
+    cfg_grandmaster.use_progressive_bias = 1;
+    cfg_grandmaster.bias_constant = DEFAULT_BIAS_CONSTANT;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
-    // --- PLAYER ROSTER (Reduced) ---
+    // 7. Grandmaster No-Bias (Control Group)
+    MCTSConfig cfg_gm_nobias = cfg_grandmaster;
+    cfg_gm_nobias.use_progressive_bias = 0; // Disabled
+
+    // --- PLAYER ROSTER (Comprehensive) ---
     TournamentPlayer players[] = {
-        { "Vanilla",  cfg_vanilla,  1200.0, 0, 0, 0, 0.0 },
-        { "FPU-Opt",  cfg_fpu,      1200.0, 0, 0, 0, 0.0 },
-        { "Decay",    cfg_decay,    1200.0, 0, 0, 0, 0.0 },
-        { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
+        { "Vanilla",    cfg_vanilla,    1200.0, 0, 0, 0, 0.0 },
+        { "Bias",       cfg_bias,       1200.0, 0, 0, 0, 0.0 },
+        { "Tuned",      cfg_tuned,      1200.0, 0, 0, 0, 0.0 },
+        { "GM-NoBias",  cfg_gm_nobias,  1200.0, 0, 0, 0, 0.0 },
+        { "GM-Full",    cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 4;
+    int num_players = 5;
     
     int games_per_pairing = GAMES_PER_PAIRING;
     #define TIME_PER_MOVE TIME_TOURNAMENT
@@ -328,11 +336,6 @@ int main() {
                         }
                     }
                     
-                    // Actually, let's update strict printing to show avg UCB in the final move summary?
-                    // No, "per ogni albero" implies per-decision.
-                    // Given the request "stampare il valore medio di ucb per ogni albero",
-                    // I will add a printf inside the move loop, scoped to the first game only to avoid spam.
-                    
                     if (game == 0) {
                         double val = 0.0;
                          if ((player == WHITE && A_is_white) || (player == BLACK && !A_is_white)) {
@@ -342,7 +345,7 @@ int main() {
                               val = mcts_get_avg_root_ucb(root_node_B, pB->config);
                               printf("\rGame 0 Turn %d: %s Avg UCB: %.2f    ", move_count, pB->name, val);
                          }
-                         fflush(stdout);
+                         //fflush(stdout);
                     }
                     
                     apply_move(&state, &best_move);
