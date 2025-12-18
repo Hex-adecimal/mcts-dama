@@ -102,7 +102,7 @@ int main() {
     // Pre-define Config
     MCTSConfig config = {
         .ucb1_c = UCB1_C,
-        .rollout_epsilon = DEFAULT_ROLLOUT_EPSILON, 
+        .rollout_epsilon = ROLLOUT_EPSILON_RANDOM, // Random works better than Smart for GM
         .draw_score = DRAW_SCORE,
         .expansion_threshold = EXPANSION_THRESHOLD,
         .use_lookahead = DEFAULT_USE_LOOKAHEAD,
@@ -113,7 +113,6 @@ int main() {
         .use_solver = 1,
         .use_progressive_bias = 0,
         .bias_constant = DEFAULT_BIAS_CONSTANT,
-        .rollout_epsilon = ROLLOUT_EPSILON_RANDOM, // Random works better than Smart for GM
         .weights = { 
             .w_capture = W_CAPTURE, 
             .w_promotion = W_PROMOTION, 
