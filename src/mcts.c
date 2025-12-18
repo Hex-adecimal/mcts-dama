@@ -379,7 +379,7 @@ static double calculate_ucb1_tuned(Node *child, MCTSConfig config) {
     return mean + exploration;
 }
 
-static double calculate_ucb1_score(Node *child, MCTSConfig config) {
+double calculate_ucb1_score(Node *child, MCTSConfig config) {
     double base_score;
     if (config.use_ucb1_tuned) {
         base_score = calculate_ucb1_tuned(child, config);

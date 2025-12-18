@@ -11,6 +11,7 @@
 #include "game.h"
 #include "mcts.h"
 #include "params.h"
+#include "debug.h"
 
 // ================================================================================================
 //  ELO RATING SYSTEM
@@ -167,29 +168,19 @@ int main() {
                                .use_tree_reuse = 0, .use_ucb1_tuned = 0, .use_tt = 0, .use_solver = 0, .use_progressive_bias = 0,
                                .weights = { W_CAPTURE, W_PROMOTION, W_ADVANCE, W_CENTER, W_EDGE, W_BASE } };
 
-    // 2. Tuned (UCB1-Tuned)
-    MCTSConfig cfg_tuned = cfg_vanilla;
-    cfg_tuned.use_ucb1_tuned = 1;
-    cfg_tuned.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
+    // 1.5 FPU (First Play Urgency Only)
+    MCTSConfig cfg_fpu = cfg_vanilla;
+    cfg_fpu.use_fpu = 1;
+    cfg_fpu.fpu_value = FPU_VALUE;
 
-    // 3. TT (Transposition Table Only)
-    MCTSConfig cfg_tt = cfg_vanilla;
-    cfg_tt.use_tt = 1;
+    // 2. Tuned (UCB1-Tuned) - EXCLUDED
+    // 3. TT (Transposition Table Only) - EXCLUDED
+    // 4. Solver (Solver Only) - EXCLUDED
 
-    // 4. Solver (Solver Only - No TT as requested)
-    MCTSConfig cfg_solver = cfg_vanilla;
-    cfg_solver.use_solver = 1;
+    // 5. Bias (Progressive Bias) - EXCLUDED
+    // MCTSConfig cfg_bias = cfg_vanilla; ...
 
-    // 5. Bias (Progressive Bias Only - No TT as requested)
-    // Bias implies using heuristics, so we also enable smart playouts
-    MCTSConfig cfg_bias = cfg_vanilla;
-    cfg_bias.use_progressive_bias = 1;
-    cfg_bias.bias_constant = DEFAULT_BIAS_CONSTANT;
-    cfg_bias.use_fpu = 1;
-    cfg_bias.fpu_value = FPU_VALUE;
-    cfg_bias.rollout_epsilon = ROLLOUT_EPSILON_SMART;
-
-    // 6. Grandmaster (Best Configuration Found: TT + Solver + UCB1-Tuned + Random Rollout)
+    // 6. Grandmaster (Best Configuration Found: TT + Solver + UCB1-Tuned + Random Rollout + FPU)
     MCTSConfig cfg_grandmaster = cfg_vanilla;
     cfg_grandmaster.use_tt = 1;
     cfg_grandmaster.use_solver = 1;
@@ -198,16 +189,13 @@ int main() {
     cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
-    // --- PLAYER ROSTER (6 players, no Ultimate/SPSA) ---
+    // --- PLAYER ROSTER (Reduced) ---
     TournamentPlayer players[] = {
         { "Vanilla",  cfg_vanilla,  1200.0, 0, 0, 0, 0.0 },
-        { "Tuned",    cfg_tuned,    1200.0, 0, 0, 0, 0.0 },
-        { "TT",       cfg_tt,       1200.0, 0, 0, 0, 0.0 },
-        { "Solver",   cfg_solver,   1200.0, 0, 0, 0, 0.0 },
-        { "Bias",     cfg_bias,     1200.0, 0, 0, 0, 0.0 },
+        { "FPU-Opt",  cfg_fpu,      1200.0, 0, 0, 0, 0.0 }, // Renamed to FPU-Opt to indicate 100.0
         { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 6;
+    int num_players = 3;
     
     int games_per_pairing = GAMES_PER_PAIRING;
     #define TIME_PER_MOVE TIME_TOURNAMENT
@@ -307,6 +295,46 @@ int main() {
                             Node *next = find_child_by_move(root_node_A, &best_move);
                             root_node_A = next;
                         }
+                    }
+                    
+                    // Stats Tracking (Thread safe accumulation)
+                    if (player == WHITE && A_is_white) {
+                        total_nodes_A += stats_A.total_iterations;
+                        total_depth_A += stats_A.total_depth;
+                        total_moves_A++; 
+                        total_time_A += stats_A.total_time;
+
+                        if (game == 0) {
+                             double avg_ucb = mcts_get_avg_root_ucb(root_node_A, pA->config);
+                             // printf(" [A] Avg UCB: %.2f ", avg_ucb);
+                        }
+                    } else if (player == BLACK && !A_is_white) {
+                        // Symmetric logic for A if Black
+                        total_nodes_A += stats_A.total_iterations;
+                        total_depth_A += stats_A.total_depth;
+                        total_moves_A++;
+                        total_time_A += stats_A.total_time;
+                         if (game == 0) {
+                             // double avg_ucb = mcts_get_avg_root_ucb(root_node_A, pA->config);
+                             // printf(" [A] Avg UCB: %.2f ", avg_ucb);
+                        }
+                    }
+                    
+                    // Actually, let's update strict printing to show avg UCB in the final move summary?
+                    // No, "per ogni albero" implies per-decision.
+                    // Given the request "stampare il valore medio di ucb per ogni albero",
+                    // I will add a printf inside the move loop, scoped to the first game only to avoid spam.
+                    
+                    if (game == 0) {
+                        double val = 0.0;
+                         if ((player == WHITE && A_is_white) || (player == BLACK && !A_is_white)) {
+                              val = mcts_get_avg_root_ucb(root_node_A, pA->config);
+                              printf("\rGame 0 Turn %d: %s Avg UCB: %.2f    ", move_count, pA->name, val);
+                         } else {
+                              val = mcts_get_avg_root_ucb(root_node_B, pB->config);
+                              printf("\rGame 0 Turn %d: %s Avg UCB: %.2f    ", move_count, pB->name, val);
+                         }
+                         fflush(stdout);
                     }
                     
                     apply_move(&state, &best_move);

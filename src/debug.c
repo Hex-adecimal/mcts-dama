@@ -1,5 +1,28 @@
 #include "debug.h"
+#include "mcts.h"
 #include <stdio.h>
+
+/**
+ * Calculates average UCB value of all children of the root.
+ * Useful for debugging FPU tuning.
+ */
+double mcts_get_avg_root_ucb(Node *root, MCTSConfig config) {
+    if (!root || root->num_children == 0) return 0.0;
+    
+    double total_ucb = 0.0;
+    int count = 0;
+    
+    for (int i = 0; i < root->num_children; i++) {
+        double val = calculate_ucb1_score(root->children[i], config);
+        // exclude infinite values (unvisited) to avoid skewing average
+        if (val < 1e8) { 
+            total_ucb += val;
+            count++;
+        }
+    }
+    
+    return (count > 0) ? (total_ucb / count) : 0.0;
+}
 
 /**
  * Prints the algebraic coordinates (e.g., "A1") of a square index.

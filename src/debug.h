@@ -2,6 +2,13 @@
 #define DEBUG_H
 
 #include "game.h"
+#include "mcts.h"
+
+/**
+ * Calculations average UCB value of all children of the root.
+ * Useful for debugging FPU tuning.
+ */
+double mcts_get_avg_root_ucb(Node *root, MCTSConfig config);
 
 /**
  * Prints the current board state to the console.

@@ -13,7 +13,8 @@
 // First Play Urgency (FPU): Value assigned to unvisited nodes.
 // If too high (1e9), forces full width exploration (breadth-first locally).
 // If lower (e.g. 1.1), allows exploiting good nodes before visiting all siblings.
-#define FPU_VALUE           1.2
+// Updated to 100.0 to be "Optimistic" (higher than typical UCB ~1.0-2.0) but not infinite.
+#define FPU_VALUE           100.0
 
 // =============================================================================
 // MCTS DEFAULTS
