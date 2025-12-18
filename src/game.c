@@ -1,27 +1,95 @@
 #include "game.h"
-#include <stdio.h>
-#include <string.h> // For memcpy
+#include <string.h>
 
 #define MAX_CHAIN_LENGTH 12
 
-// --- GLOBAL CONSTANTS ---
+// =============================================================================
+// CONSTANTS (Direction Tables for Capture Generation)
+// =============================================================================
 
-// Offsets for moving "Forward"
-// White moves towards higher indices (+9, +7), Black towards lower (-7, -9)
-static const int PAWN_DIRS[2][2] = {
-    { 9, 7 },    // WHITE offsets (NE, NW)
-    { -7, -9 }   // BLACK offsets (SE, SW)
-};
+// All 4 diagonal directions: NE(+9), NW(+7), SE(-7), SW(-9)
+static const int ALL_DIRS[4] = { 9, 7, -7, -9 };
 
-// Masks required for these movements
-// White NE (+9) and Black SE (-7) go RIGHT -> NO column H
-// White NW (+7) and Black SW (-9) go LEFT -> NO column A
-static const uint64_t PAWN_MASKS[2][2] = {
-    { NOT_FILE_H, NOT_FILE_A }, // WHITE (for +9, for +7)
-    { NOT_FILE_H, NOT_FILE_A }  // BLACK (for -7, for -9)
-};
+// Masks for jumps (2 steps in each direction)
+static const uint64_t JUMP_MASKS[4] = { NOT_FILE_GH, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_AB };
 
-// --- ZOBRIST HASHING ---
+// =============================================================================
+// MOVE LOOKUP TABLES (Pre-computed move targets)
+// =============================================================================
+// [color][from_square][direction] -> target square bitboard
+
+static Bitboard PAWN_MOVE_TARGETS[2][64][2];   // Pawn simple moves
+static Bitboard LADY_MOVE_TARGETS[64][4];      // Lady simple moves (1 step)
+static Bitboard JUMP_LANDING[64][4];           // Landing square after jump
+static Bitboard JUMP_OVER_SQ[64][4];           // Captured square in jump
+static int move_tables_initialized = 0;
+
+void init_move_tables(void) {
+    if (move_tables_initialized) return;
+    
+    for (int sq = 0; sq < 64; sq++) {
+        int row = sq / 8;
+        int col = sq % 8;
+        
+        // Clear all entries for this square
+        for (int d = 0; d < 4; d++) {
+            LADY_MOVE_TARGETS[sq][d] = 0;
+            JUMP_LANDING[sq][d] = 0;
+            JUMP_OVER_SQ[sq][d] = 0;
+        }
+        PAWN_MOVE_TARGETS[WHITE][sq][0] = 0;
+        PAWN_MOVE_TARGETS[WHITE][sq][1] = 0;
+        PAWN_MOVE_TARGETS[BLACK][sq][0] = 0;
+        PAWN_MOVE_TARGETS[BLACK][sq][1] = 0;
+        
+        // WHITE pawn moves: +9 (NE), +7 (NW)
+        if (row < 7) {
+            if (col < 7) PAWN_MOVE_TARGETS[WHITE][sq][0] = 1ULL << (sq + 9);  // NE
+            if (col > 0) PAWN_MOVE_TARGETS[WHITE][sq][1] = 1ULL << (sq + 7);  // NW
+        }
+        
+        // BLACK pawn moves: -7 (SE), -9 (SW)
+        if (row > 0) {
+            if (col < 7) PAWN_MOVE_TARGETS[BLACK][sq][0] = 1ULL << (sq - 7);  // SE
+            if (col > 0) PAWN_MOVE_TARGETS[BLACK][sq][1] = 1ULL << (sq - 9);  // SW
+        }
+        
+        // Lady moves (all 4 directions, 1 step)
+        // Dir 0: NE (+9), Dir 1: NW (+7), Dir 2: SE (-7), Dir 3: SW (-9)
+        if (row < 7 && col < 7) LADY_MOVE_TARGETS[sq][0] = 1ULL << (sq + 9);
+        if (row < 7 && col > 0) LADY_MOVE_TARGETS[sq][1] = 1ULL << (sq + 7);
+        if (row > 0 && col < 7) LADY_MOVE_TARGETS[sq][2] = 1ULL << (sq - 7);
+        if (row > 0 && col > 0) LADY_MOVE_TARGETS[sq][3] = 1ULL << (sq - 9);
+        
+        // Jump targets (2 squares in each direction)
+        // Dir 0: NE (+18), over (+9)
+        if (row < 6 && col < 6) {
+            JUMP_LANDING[sq][0] = 1ULL << (sq + 18);
+            JUMP_OVER_SQ[sq][0] = 1ULL << (sq + 9);
+        }
+        // Dir 1: NW (+14), over (+7)
+        if (row < 6 && col > 1) {
+            JUMP_LANDING[sq][1] = 1ULL << (sq + 14);
+            JUMP_OVER_SQ[sq][1] = 1ULL << (sq + 7);
+        }
+        // Dir 2: SE (-14), over (-7)
+        if (row > 1 && col < 6) {
+            JUMP_LANDING[sq][2] = 1ULL << (sq - 14);
+            JUMP_OVER_SQ[sq][2] = 1ULL << (sq - 7);
+        }
+        // Dir 3: SW (-18), over (-9)
+        if (row > 1 && col > 1) {
+            JUMP_LANDING[sq][3] = 1ULL << (sq - 18);
+            JUMP_OVER_SQ[sq][3] = 1ULL << (sq - 9);
+        }
+    }
+    
+    move_tables_initialized = 1;
+}
+
+// =============================================================================
+// ZOBRIST HASHING
+// =============================================================================
 
 // [Color][PieceType][Square]
 // Color: 0=White, 1=Black
@@ -49,47 +117,35 @@ void zobrist_init() {
     zobrist_black_move = rand64();
 }
 
+// Helper: hash a bitboard for Zobrist
+static uint64_t hash_bitboard(Bitboard bb, int color, int piece_type) {
+    uint64_t h = 0;
+    while (bb) {
+        int sq = __builtin_ctzll(bb);
+        h ^= zobrist_keys[color][piece_type][sq];
+        bb &= (bb - 1);
+    }
+    return h;
+}
+
 static uint64_t compute_full_hash(const GameState *state) {
-    uint64_t hash = 0;
+    uint64_t hash = hash_bitboard(state->white_pieces, WHITE, 0)
+                  ^ hash_bitboard(state->white_ladies, WHITE, 1)
+                  ^ hash_bitboard(state->black_pieces, BLACK, 0)
+                  ^ hash_bitboard(state->black_ladies, BLACK, 1);
     
-    // White Pieces
-    Bitboard wp = state->white_pieces;
-    while(wp) {
-        int sq = __builtin_ctzll(wp);
-        hash ^= zobrist_keys[WHITE][0][sq];
-        wp &= (wp - 1);
-    }
-    // White Ladies
-    Bitboard wl = state->white_ladies;
-    while(wl) {
-        int sq = __builtin_ctzll(wl);
-        hash ^= zobrist_keys[WHITE][1][sq];
-        wl &= (wl - 1);
-    }
-    // Black Pieces
-    Bitboard bp = state->black_pieces;
-    while(bp) {
-        int sq = __builtin_ctzll(bp);
-        hash ^= zobrist_keys[BLACK][0][sq];
-        bp &= (bp - 1);
-    }
-    // Black Ladies
-    Bitboard bl = state->black_ladies;
-    while(bl) {
-        int sq = __builtin_ctzll(bl);
-        hash ^= zobrist_keys[BLACK][1][sq];
-        bl &= (bl - 1);
-    }
-    
+    // Turn encoding: XOR with zobrist_black_move only when it's Black's turn.
+    // This ensures identical positions with different turns have different hashes.
+    // The key is toggled on/off each move via XOR in apply_move().
     if (state->current_player == BLACK) {
         hash ^= zobrist_black_move;
     }
-    
     return hash;
 }
 
-
-// --- INITIALIZATION AND PRINTING ---
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
 
 /**
  * Initializes the game state.
@@ -121,86 +177,9 @@ void init_game(GameState *state) {
     state->hash = compute_full_hash(state);
 }
 
-/**
- * Prints the current board state to the console.
- * Displays the board with coordinates, piece positions, and current turn info.
- * @param state Pointer to the GameState to display.
- */
-void print_board(const GameState *state) {
-    printf("\n   A B C D E F G H\n");
-    printf("  +---------------+\n");
-
-    // Iterate from top rank (7) to bottom rank (0) to print correctly
-    for (int rank = 7; rank >= 0; rank--) {
-        printf("%d |", rank + 1); // Print rank label (1-8)
-        
-        for (int file = 0; file < 8; file++) {
-            int sq = rank * 8 + file; // Map rank/file to square index (0-63)
-            char c = '.'; // Default: empty square
-
-            // Check for piece presence on the current square
-            if (check_bit(state->white_pieces, sq)) c = 'w';
-            else if (check_bit(state->black_pieces, sq)) c = 'b';
-            else if (check_bit(state->white_ladies, sq)) c = 'W';
-            else if (check_bit(state->black_ladies, sq)) c = 'B';
-            
-            printf("%c|", c); // Print the character and a separator
-        }
-        printf(" %d\n", rank + 1);
-    }
-    printf("  +---------------+\n");
-    printf("   A B C D E F G H\n\n");
-    
-    // Additional debug info
-    printf("Turn: %s\n", (state->current_player == WHITE) ? "WHITE" : "BLACK");
-    printf("White pieces bitboard: %llu\n", state->white_pieces);
-}
-
-/**
- * Prints the algebraic coordinates (e.g., "A1") of a square index.
- * @param square_idx The 0-63 index of the square.
- */
-void print_coords(int square_idx) {
-    int rank = (square_idx / 8) + 1; // Riga 1-8
-    char file = (square_idx % 8) + 'A'; // Colonna A-H
-    printf("%c%d", file, rank);
-}
-
-/**
- * Prints the list of generated moves to the console.
- * Useful for debugging and verifying move generation logic.
- * @param list Pointer to the MoveList containing moves to print.
- */
-void print_move_list(MoveList *list) {
-
-    printf("------------------------------------------------\n");
-    printf("Found %d possible moves:\n", list->count);
-    
-    for (int i = 0; i < list->count; i++) {
-        Move m = list->moves[i];
-        printf("%d) ", i + 1);
-        
-        if (m.length == 0) { // Simple move
-            print_coords(m.path[0]);
-            printf(" -> ");
-            print_coords(m.path[1]);
-        } else { // Capture chain
-            print_coords(m.path[0]);
-            for (int j = 0; j < m.length; j++) {
-                printf(" x ");
-                print_coords(m.captured_squares[j]);
-                printf(" -> ");
-                print_coords(m.path[j+1]);
-            }
-            printf(" (Len: %d, Ladies: %d, First Lady: %d, Is Lady: %d)", 
-                   m.length, m.captured_ladies_count, m.first_captured_is_lady, m.is_lady_move);
-        }
-        printf("\n");
-    }
-    printf("------------------------------------------------\n");
-}
-
-// --- CORE ENGINE ---
+// =============================================================================
+// CORE ENGINE (Apply Move)
+// =============================================================================
 
 /**
  * Updates bitboards and switches the turn.
@@ -208,7 +187,6 @@ void print_move_list(MoveList *list) {
  * @param from Source square index.
  * @param to Destination square index.
  */
-// Helper privato: sposta e promuove
 static void perform_movement(GameState *s, int from, int to, int us) {
     Bitboard *own_pieces = (us == WHITE) ? &s->white_pieces : &s->black_pieces;
     Bitboard *own_ladies = (us == WHITE) ? &s->white_ladies : &s->black_ladies;
@@ -247,7 +225,7 @@ void apply_move(GameState *state, const Move *move) {
     
     state->hash ^= zobrist_keys[us][is_lady][from];
 
-    // 1. Move the piece (and handle promotion)
+    // Move the piece (and handle promotion)
     perform_movement(state, from, to, us);
 
     // --- ZOBRIST: Add piece at destination ---
@@ -256,7 +234,7 @@ void apply_move(GameState *state, const Move *move) {
     int now_lady = (us == WHITE) ? check_bit(state->white_ladies, to) : check_bit(state->black_ladies, to);
     state->hash ^= zobrist_keys[us][now_lady][to];
 
-    // 2. Remove captured pieces (if any)
+    // Remove captured pieces (if any)
     if (move->length > 0) {
         int them = us ^ 1;
         Bitboard *enemy_pieces = (them == BLACK) ? &state->black_pieces : &state->white_pieces;
@@ -280,12 +258,14 @@ void apply_move(GameState *state, const Move *move) {
         state->moves_without_captures++;
     }
 
-    // 3. Switch Turn
+    // Switch Turn
     state->current_player = (Color)(us ^ 1);
     state->hash ^= zobrist_black_move; // Toggle turn hash
 }
 
-// --- MOVE GENERATION ---
+// =============================================================================
+// MOVE GENERATION
+// =============================================================================
 
 /**
  * Helper to add a simple move to the move list.
@@ -306,7 +286,7 @@ static void add_simple_move(MoveList *list, int from, int to, int is_lady) {
 }
 
 
-// Evita la duplicazione del codice di salvataggio e calcolo score
+// Helper to save a capture move and compute priority metrics
 static void save_move(MoveList *list, const GameState *s, 
                              int path[], int captured[], int depth, int is_lady) {
     if (list->count >= MAX_MOVES) return;
@@ -325,9 +305,9 @@ static void save_move(MoveList *list, const GameState *s,
     m->captured_ladies_count = 0;
     m->first_captured_is_lady = 0;
 
-    // Calcolo metriche per la priorità (Quality)
+    // Compute priority metrics (Quality)
     for(int k = 0; k < depth; k++) {
-        // Controlliamo se il pezzo catturato era una dama (Bianca o Nera)
+        // Check if captured piece was a Lady
         if ((s->white_ladies | s->black_ladies) & (1ULL << captured[k])) {
             m->captured_ladies_count++;
             if (k == 0) m->first_captured_is_lady = 1;
@@ -338,7 +318,7 @@ static void save_move(MoveList *list, const GameState *s,
 /**
  * Recursive function to find capture chains.
  * Explores all possible jump sequences using DFS and Bitwise checks.
- * * @param s Pointer to the current GameState.
+ * @param s Pointer to the current GameState.
  * @param current_sq The square index where the piece currently is.
  * @param path Array storing the sequence of squares visited.
  * @param captured Array storing the sequence of captured squares.
@@ -357,11 +337,6 @@ static void find_captures(const GameState *s, int current_sq,
     int found_continuation = 0;
     int us = s->current_player;
 
-    // Directions: 0=NE(+9), 1=NW(+7), 2=SE(-7), 3=SW(-9)
-    static const int DIRS[4] = { 9, 7, -7, -9 };
-    // Masks to check if JUMP start is valid (e.g. to jump NE, cannot be in GH)
-    static const uint64_t JUMP_MASKS[4] = { NOT_FILE_GH, NOT_FILE_AB, NOT_FILE_GH, NOT_FILE_AB };
-
     // Loop ranges based on piece type and color
     // White Pawn: 0-2 (+9, +7)
     // Black Pawn: 2-4 (-7, -9)
@@ -370,11 +345,11 @@ static void find_captures(const GameState *s, int current_sq,
     int end_dir   = is_lady ? 4 : (us == WHITE ? 2 : 4);
 
     for (int i = start_dir; i < end_dir; i++) {
-        // 1. BITWISE BOUNDARY CHECK
+        // BITWISE BOUNDARY CHECK
         // If current square is too close to the edge for a double jump, skip.
         if (!((1ULL << current_sq) & JUMP_MASKS[i])) continue;
 
-        int step = DIRS[i];
+        int step = ALL_DIRS[i];
         int jump = step * 2;
         
         int bridge_sq = current_sq + step;
@@ -383,7 +358,7 @@ static void find_captures(const GameState *s, int current_sq,
         // Safety vertical check (mostly for debug, bitmasks usually cover this)
         if (land_sq < 0 || land_sq > 63) continue;
 
-        // 2. CHECK CONTENT
+        // CHECK CONTENT
         Bitboard bridge_mask = (1ULL << bridge_sq);
         Bitboard land_mask   = (1ULL << land_sq);
 
@@ -399,7 +374,7 @@ static void find_captures(const GameState *s, int current_sq,
         // Landing must be empty (relative to current recursion state)
         if (occupied & land_mask) continue;
 
-        // 3. VALID CAPTURE -> RECURSE
+        // VALID CAPTURE -> RECURSE
         found_continuation = 1;
         
         path[depth + 1] = land_sq;
@@ -421,7 +396,7 @@ static void find_captures(const GameState *s, int current_sq,
         }
     }
 
-    // 4. END OF CHAIN
+    // END OF CHAIN
     if (!found_continuation && depth > 0) {
         save_move(list, s, path, captured, depth, is_lady);
     }
@@ -480,8 +455,7 @@ static void filter_moves(MoveList *list) {
 
 /**
  * Generates all simple moves (non-captures) for the current player.
- * @param s Pointer to the current GameState.
- * @param list Pointer to the MoveList to populate.
+ * Uses pre-computed lookup tables for faster move generation.
  */
 void generate_simple_moves(const GameState *s, MoveList *list) {
     int us = s->current_player;
@@ -489,37 +463,34 @@ void generate_simple_moves(const GameState *s, MoveList *list) {
     Bitboard own_ladies = (us == WHITE) ? s->white_ladies : s->black_ladies;
     Bitboard empty      = get_empty_squares(s);
 
-    // Pawns
-    for (int i = 0; i < 2; i++) {
-        int offset = PAWN_DIRS[us][i];
-        Bitboard mask = PAWN_MASKS[us][i];
-        Bitboard movers = own_pieces & mask;
-        Bitboard valid = shift_bitboard(movers, offset) & empty;
+    // Pawns (using lookup tables)
+    Bitboard pawns = own_pieces;
+    while (pawns) {
+        int from = __builtin_ctzll(pawns);
         
-        while (valid) {
-            int to = __builtin_ctzll(valid);
-            int from = to - offset;
-            add_simple_move(list, from, to, 0);
-            valid &= (valid - 1);
+        for (int dir = 0; dir < 2; dir++) {
+            Bitboard target = PAWN_MOVE_TARGETS[us][from][dir];
+            if (target & empty) {
+                int to = __builtin_ctzll(target);
+                add_simple_move(list, from, to, 0);
+            }
         }
+        pawns &= (pawns - 1);
     }
 
-    // Ladies
-    int directions[4] = { 9, 7, -7, -9 };
-    Bitboard dir_masks[4] = { NOT_FILE_H, NOT_FILE_A, NOT_FILE_H, NOT_FILE_A };
-
-    for (int i = 0; i < 4; i++) {
-        int offset = directions[i];
-        Bitboard mask = dir_masks[i];
-        Bitboard movers = own_ladies & mask;
-        Bitboard valid = shift_bitboard(movers, offset) & empty;
-
-        while (valid) {
-            int to = __builtin_ctzll(valid);
-            int from = to - offset;
-            add_simple_move(list, from, to, 1);
-            valid &= (valid - 1);
+    // Ladies (using lookup tables, all 4 directions)
+    Bitboard ladies = own_ladies;
+    while (ladies) {
+        int from = __builtin_ctzll(ladies);
+        
+        for (int dir = 0; dir < 4; dir++) {
+            Bitboard target = LADY_MOVE_TARGETS[from][dir];
+            if (target & empty) {
+                int to = __builtin_ctzll(target);
+                add_simple_move(list, from, to, 1);
+            }
         }
+        ladies &= (ladies - 1);
     }
 }
 
@@ -541,26 +512,21 @@ void generate_captures(const GameState *s, MoveList *list) {
     // Calculate initial occupied board
     Bitboard occupied = get_all_occupied(s);
     
-    // Iterate all pieces and try to find chains
-    Bitboard p = own_pieces;
-    while (p) {
-        int sq = __builtin_ctzll(p);
-        int path[MAX_CHAIN_LENGTH + 1]; 
-        int captured[MAX_CHAIN_LENGTH]; 
-        path[0] = sq;
-        // Pass occupied MINUS the starting square (it's floating)
-        find_captures(s, sq, path, captured, 0, 0, enemy_pieces, enemy_ladies, occupied & ~(1ULL << sq), list);
-        p &= (p - 1);
-    }
+    // Helper to iterate pieces and find capture chains
+    Bitboard pieces[2] = { own_pieces, own_ladies };
+    int is_lady_flag[2] = { 0, 1 };
     
-    Bitboard l = own_ladies;
-    while (l) {
-        int sq = __builtin_ctzll(l);
-        int path[MAX_CHAIN_LENGTH + 1];
-        int captured[MAX_CHAIN_LENGTH];
-        path[0] = sq;
-        find_captures(s, sq, path, captured, 0, 1, enemy_pieces, enemy_ladies, occupied & ~(1ULL << sq), list);
-        l &= (l - 1);
+    for (int t = 0; t < 2; t++) {
+        Bitboard bb = pieces[t];
+        while (bb) {
+            int sq = __builtin_ctzll(bb);
+            int path[MAX_CHAIN_LENGTH + 1];
+            int captured[MAX_CHAIN_LENGTH];
+            path[0] = sq;
+            find_captures(s, sq, path, captured, 0, is_lady_flag[t], 
+                          enemy_pieces, enemy_ladies, occupied & ~(1ULL << sq), list);
+            bb &= (bb - 1);
+        }
     }
 }
 
@@ -573,14 +539,14 @@ void generate_captures(const GameState *s, MoveList *list) {
 void generate_moves(const GameState *s, MoveList *list) {
     list->count = 0;
     
-    // 1. Generate Captures
+    // Generate Captures
     generate_captures(s, list);
     
-    // 2. If captures exist, filter them and return
+    // If captures exist, filter them and return
     if (list->count > 0) {
         filter_moves(list);
     } else {
-        // 3. Otherwise generate simple moves
+        // Otherwise generate simple moves
         generate_simple_moves(s, list);
     }
 }

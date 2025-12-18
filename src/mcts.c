@@ -1,4 +1,5 @@
 #include "mcts.h"
+#include "debug.h"
 #include "params.h"
 
 #include <stdlib.h>
@@ -7,24 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
-// ================================================================================================
-//  DEBUG HELPERS
-// ================================================================================================
-
-void print_move_description(Move m) {
-    int target_idx = (m.length == 0) ? 1 : m.length;
-    
-    printf("%c%d -> %c%d", 
-           (m.path[0]%8)+'A', (m.path[0]/8)+1,
-           (m.path[target_idx]%8)+'A', (m.path[target_idx]/8)+1);
-           
-    if (m.length > 0) printf(" (CAPTURE)");
-    printf("\n");
-}
-
-// ================================================================================================
-//  MEMORY MANAGEMENT (ARENA)
-// ================================================================================================
+// =============================================================================
+// MEMORY MANAGEMENT (Arena Allocator)
+// =============================================================================
+// arena_init, arena_alloc, arena_reset, arena_free
 
 void arena_init(Arena *a, size_t total_size) {
     a->buffer = malloc(total_size);
@@ -111,6 +98,11 @@ static double evaluate_move_heuristic(const GameState *state, const Move *move, 
          if ((us == WHITE && from_row == 0) || (us == BLACK && from_row == 7)) {
              score -= config.weights.w_base;
          }
+    }
+    
+    // 6. Queen Activity Bonus - encourage queens to move
+    if (move->is_lady_move) {
+        score += config.weights.w_lady_activity;
     }
     
     return score;
@@ -302,35 +294,23 @@ static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSC
     apply_move(&next_state, &move_to_try);
 
     // Create the child node
-    // Check TT first!
-    Node *child = NULL;
-    
-    if (tt) {
-        child = tt_lookup(tt, &next_state);
-    }
-    
-    if (!child) {
-        child = create_node(node, move_to_try, next_state, arena, config);
-        if (tt) tt_insert(tt, child);
-    } else {
-        // Found in TT (Transposition)
+    Node *child = create_node(node, move_to_try, next_state, arena, config);
 
-        if (child->status != SOLVED_NONE) {
-             // We found a node that is already solved!
-             // This is great info.
-        }
-        child = create_node(node, move_to_try, next_state, arena, config);
-        
+    // Handle Transposition Table
+    if (tt) {
         Node *match = tt_lookup(tt, &next_state);
         if (match) {
-            // Warm-start this node with stats from the transposition!
-            // This is "Transposition Table initialization".
+            // Found in TT: Warm-start this node with stats from the transposition!
             child->visits = match->visits;
             child->score  = match->score;
             child->sum_sq_score = match->sum_sq_score;
-        } else {
-            if (tt) tt_insert(tt, child);
+            child->status = match->status; // CRITICAL: Copy solved status
         }
+        
+        // Always update TT to point to the new active representative of this state
+        // This ensures the TT entry points to the node currently in the tree,
+        // so it receives updates during backpropagation.
+        tt_insert(tt, child);
     }
 
     // Resize children array using Arena
@@ -546,7 +526,7 @@ static double simulate_rollout(Node *node, MCTSConfig config) {
     MoveList temp_moves;
     
     // Limit depth to avoid infinite loops
-    while (depth < 200) { 
+    while (depth < MAX_ROLLOUT_DEPTH) {
         generate_moves(&temp_state, &temp_moves);
 
         if (temp_moves.count == 0) {

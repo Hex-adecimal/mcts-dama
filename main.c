@@ -6,6 +6,7 @@
 
 #include "game.h"
 #include "mcts.h"
+#include "debug.h"
 #include "params.h"
 
 // Parse "A3" -> 0-63 index
@@ -31,7 +32,6 @@ void format_square(int sq, char *buf) {
     sprintf(buf, "%c%d", 'A' + col, row + 1);
 }
 
-// Rename to avoid conflict
 void display_moves(const MoveList *list, Node *root) {
     char buf_from[4], buf_to[4];
     printf("Mosse valide (MCTS Stats):\n");
@@ -57,9 +57,6 @@ void display_moves(const MoveList *list, Node *root) {
                 
                 printf("  [Win: %.1f%%, Visits: %d]", win_rate, child->visits);
                 
-                // Labels are from Human's perspective:
-                // SOLVED_WIN at child = AI (player to move at child) can win = BAD for Human
-                // SOLVED_LOSS at child = AI will lose = GOOD for Human
                 if (child->status == SOLVED_WIN) printf(" (LOSS)");
                 if (child->status == SOLVED_LOSS) printf(" (WIN)");
                 if (child->status == SOLVED_DRAW) printf(" (DRAW)");
@@ -71,7 +68,8 @@ void display_moves(const MoveList *list, Node *root) {
 }
 
 int main() {
-    zobrist_init(); // Initialize Zobrist Hashing Keys
+    zobrist_init();
+    init_move_tables();
     srand(time(NULL));
     
     Arena mcts_arena;
@@ -109,19 +107,22 @@ int main() {
         .expansion_threshold = EXPANSION_THRESHOLD,
         .use_lookahead = DEFAULT_USE_LOOKAHEAD,
         .verbose = 1,  
-        .use_tree_reuse = 1, // ENABLED (Reuse Subtree)
-        .use_ucb1_tuned = 1, // ENABLED (Grandmaster)
-        .use_tt = 1,         // ENABLED (Grandmaster)
-        .use_solver = 1,     // ENABLED (Grandmaster)
-        .use_progressive_bias = 1, // ENABLED (Grandmaster)
-        .bias_constant = 3.0,
+        .use_tree_reuse = DEFAULT_TREE_REUSE,
+        .use_ucb1_tuned = 1,  // Enabled (Best Found: TT + Solver + UCB1-Tuned + Random Rollout)
+        .use_tt = 1,
+        .use_solver = 1,
+        .use_progressive_bias = 0,
+        .bias_constant = DEFAULT_BIAS_CONSTANT,
+        .rollout_epsilon = ROLLOUT_EPSILON_RANDOM, // Random works better than Smart for GM
         .weights = { 
-            .w_capture = 10.19, 
-            .w_promotion = 4.96, 
-            .w_advance = 0.00,  
-            .w_center = 3.12, 
-            .w_edge = 1.93, 
-            .w_base = 3.07      
+            .w_capture = W_CAPTURE, 
+            .w_promotion = W_PROMOTION, 
+            .w_advance = W_ADVANCE,  
+            .w_center = W_CENTER, 
+            .w_edge = W_EDGE, 
+            .w_base = W_BASE,
+            .w_threat = W_THREAT,
+            .w_lady_activity = W_LADY_ACTIVITY
         }
     };
     

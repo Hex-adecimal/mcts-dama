@@ -21,18 +21,18 @@ BIN_DIR = bin
 TARGET  = $(BIN_DIR)/dama
 
 # Source files
-SRCS = main.c src/game.c src/mcts.c
+SRCS = main.c src/game.c src/mcts.c src/debug.c
 
 # Object files (maintains directory structure in obj)
 OBJS = $(SRCS:%.c=$(OBJ_DIR)/%.o)
 DEPS = $(OBJS:.o=.d)
 
 # Test configuration
-TEST_SRCS = test/test_game.c src/game.c
+TEST_SRCS = test/test_game.c src/game.c src/debug.c
 TEST_TARGET = bin/run_tests
 
 # Tournament target
-TOURNAMENT_SRCS = main_tournament.c src/game.c src/mcts.c
+TOURNAMENT_SRCS = tools/tournament.c src/game.c src/mcts.c src/debug.c
 TOURNAMENT_TARGET = bin/tournament
 
 all: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
@@ -42,10 +42,13 @@ main: all
 .PHONY: main
 
 tournament: $(BIN_DIR) $(OBJ_DIR)
-	$(CC) $(CFLAGS) -o $(TOURNAMENT_TARGET) $(TOURNAMENT_SRCS) -lm $(LDFLAGS)
+	$(CC) $(CFLAGS) -MF $(OBJ_DIR)/tournament.d -o $(TOURNAMENT_TARGET) $(TOURNAMENT_SRCS) -lm $(LDFLAGS)
 
 tuner: $(BIN_DIR) $(OBJ_DIR)
-	$(CC) $(CFLAGS) -o bin/tuner main_tuner.c src/game.c src/mcts.c -lm $(LDFLAGS)
+	$(CC) $(CFLAGS) -MF $(OBJ_DIR)/tuner.d -o bin/tuner tools/tuner.c src/game.c src/mcts.c src/debug.c -lm $(LDFLAGS)
+
+fast: $(BIN_DIR) $(OBJ_DIR)
+	$(CC) $(CFLAGS) -MF $(OBJ_DIR)/fast.d -o bin/fast tools/fast_tournament.c src/game.c src/mcts.c src/debug.c -lm $(LDFLAGS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)

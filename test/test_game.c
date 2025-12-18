@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include "../src/game.h"
+#include "../src/debug.h"
 
 
 // gcc ./src/game.c test/test_game.c -o run_tests
@@ -321,6 +322,7 @@ void test_priority_quality_captured() {
 }
 
 int main() {
+    init_move_tables();
     printf("--- INIZIO TEST SUITE DAMA ITALIANA ---\n\n");
 
     test_simple_move();

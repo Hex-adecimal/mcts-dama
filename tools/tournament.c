@@ -48,7 +48,7 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
     init_game(&state);
     
     int turn_count = 0;
-    int max_turns = 150; // Prevent infinite games
+    int max_turns = MAX_GAME_TURNS;
     
     // Persistent roots for tree reuse
     Node *root_white = NULL;
@@ -103,7 +103,7 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
             root = mcts_create_root(state, arena, *config);
         }
         
-        double time_limit = (state.current_player == WHITE) ? TIME_WHITE : TIME_BLACK;
+        double time_limit = TIME_TOURNAMENT;
         
         Node *new_root = NULL;
         Move chosen_move = mcts_search(root, arena, time_limit, *config, stats, &new_root);
@@ -148,7 +148,8 @@ int compare_players(const void *a, const void *b) {
 }
 
 int main() {
-    zobrist_init(); // Init Zobrist (even if unused by some players)
+    zobrist_init();
+    init_move_tables();
     srand(time(NULL));
     
     printf("=== MCTS ROUND ROBIN TOURNAMENT ===\n");
@@ -162,14 +163,14 @@ int main() {
     // --- CONFIGURATIONS ---
     
     // 1. Vanilla (Baseline: Pure Random Playouts)
-    MCTSConfig cfg_vanilla = { .ucb1_c = UCB1_C, .rollout_epsilon = 1.0, .draw_score = DRAW_SCORE, .expansion_threshold = EXPANSION_THRESHOLD, 
+    MCTSConfig cfg_vanilla = { .ucb1_c = UCB1_C, .rollout_epsilon = ROLLOUT_EPSILON_RANDOM, .draw_score = DRAW_SCORE, .expansion_threshold = EXPANSION_THRESHOLD, 
                                .use_tree_reuse = 0, .use_ucb1_tuned = 0, .use_tt = 0, .use_solver = 0, .use_progressive_bias = 0,
-                               .weights = { 10.0, 5.0, 0.5, 3.0, 2.0, 2.0 } };
+                               .weights = { W_CAPTURE, W_PROMOTION, W_ADVANCE, W_CENTER, W_EDGE, W_BASE } };
 
     // 2. Tuned (UCB1-Tuned)
     MCTSConfig cfg_tuned = cfg_vanilla;
     cfg_tuned.use_ucb1_tuned = 1;
-    cfg_tuned.rollout_epsilon = 0.1; // Smarter playouts
+    cfg_tuned.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
     // 3. TT (Transposition Table Only)
     MCTSConfig cfg_tt = cfg_vanilla;
@@ -183,45 +184,29 @@ int main() {
     // Bias implies using heuristics, so we also enable smart playouts
     MCTSConfig cfg_bias = cfg_vanilla;
     cfg_bias.use_progressive_bias = 1;
-    cfg_bias.bias_constant = 3.0;
-    cfg_bias.rollout_epsilon = 0.1;
+    cfg_bias.bias_constant = DEFAULT_BIAS_CONSTANT;
+    cfg_bias.rollout_epsilon = ROLLOUT_EPSILON_SMART;
 
-    // 6. Ultimate (All Best Features Combined)
-    MCTSConfig cfg_ultimate = cfg_vanilla;
-    cfg_ultimate.use_tt = 1;
-    cfg_ultimate.use_solver = 1;
-    cfg_ultimate.use_progressive_bias = 1;
-    cfg_ultimate.bias_constant = 3.0;
-    cfg_ultimate.rollout_epsilon = 0.1;
-
-    // 7. SPSA Tuned (Best Weights found)
-    MCTSConfig cfg_spsa = cfg_ultimate; // Inherit features from Ultimate
-    cfg_spsa.weights.w_capture = 10.1878;
-    cfg_spsa.weights.w_promotion = 4.9642;
-    cfg_spsa.weights.w_advance = 0.0000;
-    cfg_spsa.weights.w_center = 3.1170;
-    cfg_spsa.weights.w_edge = 1.9339;
-    cfg_spsa.weights.w_base = 3.0680;
-
-    // 8. Grandmaster (SPSA Weights + UCB1-Tuned + All Features)
-    MCTSConfig cfg_grandmaster = cfg_spsa;
+    // 6. Grandmaster (Best Configuration Found: TT + Solver + UCB1-Tuned + Random Rollout)
+    MCTSConfig cfg_grandmaster = cfg_vanilla;
+    cfg_grandmaster.use_tt = 1;
+    cfg_grandmaster.use_solver = 1;
     cfg_grandmaster.use_ucb1_tuned = 1;
+    cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
-    // --- PLAYER ROSTER ---
+    // --- PLAYER ROSTER (6 players, no Ultimate/SPSA) ---
     TournamentPlayer players[] = {
         { "Vanilla",  cfg_vanilla,  1200.0, 0, 0, 0, 0.0 },
         { "Tuned",    cfg_tuned,    1200.0, 0, 0, 0, 0.0 },
         { "TT",       cfg_tt,       1200.0, 0, 0, 0, 0.0 },
         { "Solver",   cfg_solver,   1200.0, 0, 0, 0, 0.0 },
         { "Bias",     cfg_bias,     1200.0, 0, 0, 0, 0.0 },
-        { "Ultimate", cfg_ultimate, 1200.0, 0, 0, 0, 0.0 },
-        { "SPSA",     cfg_spsa,     1200.0, 0, 0, 0, 0.0 },
         { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 8;
+    int num_players = 6;
     
-    int games_per_pairing = 30;
-    #define TIME_PER_MOVE 0.5
+    int games_per_pairing = GAMES_PER_PAIRING;
+    #define TIME_PER_MOVE TIME_TOURNAMENT
     
     double start_time = (double)clock();
     
@@ -239,8 +224,9 @@ int main() {
             
             long long total_nodes_A = 0, total_depth_A = 0, total_moves_A = 0;
             long long total_nodes_B = 0, total_depth_B = 0, total_moves_B = 0;
+            double total_time_A = 0.0, total_time_B = 0.0;
             
-            #pragma omp parallel for reduction(+:wins_A, wins_B, draws, total_nodes_A, total_depth_A, total_moves_A, total_nodes_B, total_depth_B, total_moves_B) schedule(dynamic)
+            #pragma omp parallel for reduction(+:wins_A, wins_B, draws, total_nodes_A, total_depth_A, total_moves_A, total_nodes_B, total_depth_B, total_moves_B, total_time_A, total_time_B) schedule(dynamic)
             for (int game = 0; game < games_per_pairing; game++) {
                 GameState state;
                 init_game(&state);
@@ -253,8 +239,8 @@ int main() {
                 
                 // Arena per thread
                 Arena arena_A, arena_B;
-                arena_init(&arena_A, 1512 * 1024 * 1024); // 128MB Safe
-                arena_init(&arena_B, 1512 * 1024 * 1024);
+                arena_init(&arena_A, ARENA_SIZE_TOURNAMENT);
+                arena_init(&arena_B, ARENA_SIZE_TOURNAMENT);
                 
                 // MCTS Trees (No persistence)
                 Node *root_node_A = NULL;
@@ -332,20 +318,25 @@ int main() {
                 total_depth_B += stats_B.total_depth;
                 total_moves_B += stats_B.total_moves;
                 
+                total_time_A += stats_A.total_time;
+                total_time_B += stats_B.total_time;
+                
                 arena_free(&arena_A);
                 arena_free(&arena_B);
             }
             
             // --- PRINT MATCH STATISTICS ---
-            printf("   > %s Stats: %.0f Nodes/Move, Depth %.1f\n", 
+            printf("   > %s Stats: %.0f Nodes/Move, Depth %.1f, %.0f iter/sec\n", 
                    pA->name, 
                    (total_moves_A > 0) ? (double)total_nodes_A / total_moves_A : 0, 
-                   (total_moves_A > 0) ? (double)total_depth_A / total_moves_A : 0);
+                   (total_moves_A > 0) ? (double)total_depth_A / total_moves_A : 0,
+                   (total_time_A > 0) ? (double)total_nodes_A / total_time_A : 0);
             
-            printf("   > %s Stats: %.0f Nodes/Move, Depth %.1f\n", 
+            printf("   > %s Stats: %.0f Nodes/Move, Depth %.1f, %.0f iter/sec\n", 
                    pB->name, 
                    (total_moves_B > 0) ? (double)total_nodes_B / total_moves_B : 0, 
-                   (total_moves_B > 0) ? (double)total_depth_B / total_moves_B : 0);
+                   (total_moves_B > 0) ? (double)total_depth_B / total_moves_B : 0,
+                   (total_time_B > 0) ? (double)total_nodes_B / total_time_B : 0);
             
             // --- UPDATE STATS ---
             pA->wins += wins_A;
