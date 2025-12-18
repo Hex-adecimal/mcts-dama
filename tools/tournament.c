@@ -185,6 +185,8 @@ int main() {
     MCTSConfig cfg_bias = cfg_vanilla;
     cfg_bias.use_progressive_bias = 1;
     cfg_bias.bias_constant = DEFAULT_BIAS_CONSTANT;
+    cfg_bias.use_fpu = 1;
+    cfg_bias.fpu_value = FPU_VALUE;
     cfg_bias.rollout_epsilon = ROLLOUT_EPSILON_SMART;
 
     // 6. Grandmaster (Best Configuration Found: TT + Solver + UCB1-Tuned + Random Rollout)
@@ -192,6 +194,8 @@ int main() {
     cfg_grandmaster.use_tt = 1;
     cfg_grandmaster.use_solver = 1;
     cfg_grandmaster.use_ucb1_tuned = 1;
+    cfg_grandmaster.use_fpu = 1;
+    cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
     // --- PLAYER ROSTER (6 players, no Ultimate/SPSA) ---

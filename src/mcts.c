@@ -304,7 +304,7 @@ static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSC
             child->visits = match->visits;
             child->score  = match->score;
             child->sum_sq_score = match->sum_sq_score;
-            child->status = match->status; // CRITICAL: Copy solved status
+            child->status = match->status; // Copy solved status
         }
         
         // Always update TT to point to the new active representative of this state
@@ -336,8 +336,10 @@ static Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSC
  * Calculates the UCB1 value for a node.
  * UCB1 = WinRate + C * sqrt(ln(ParentVisits) / NodeVisits)
  */
-static double calculate_ucb1(Node *child) {
-    if (child->visits == 0) return 1e9; // Infinite value for unvisited nodes
+static double calculate_ucb1(Node *child, MCTSConfig config) {
+    if (child->visits == 0) {
+        return config.use_fpu ? config.fpu_value : 1e9;
+    }
 
     double win_rate = child->score / (double)child->visits;
     double exploration = UCB1_C * sqrt(log((double)child->parent->visits) / (double)child->visits);
@@ -347,12 +349,14 @@ static double calculate_ucb1(Node *child) {
 
 /**
  * Calculates the UCB1-Tuned value for a node.
- * Uses variance estimate to tune the confidence interval.
+ * Uses variance estimate to tune the difference interval.
  * Formula: UCB = Mean + sqrt( (ln N / n) * min(1/4, V) )
  * Where V = Variance + sqrt( (2 ln N) / n )
  */
-static double calculate_ucb1_tuned(Node *child) {
-    if (child->visits == 0) return 1e9; // Infinite value for unvisited nodes
+static double calculate_ucb1_tuned(Node *child, MCTSConfig config) {
+    if (child->visits == 0) {
+        return config.use_fpu ? config.fpu_value : 1e9;
+    }
 
     double N = (double)child->parent->visits;
     double n = (double)child->visits;
@@ -378,9 +382,9 @@ static double calculate_ucb1_tuned(Node *child) {
 static double calculate_ucb1_score(Node *child, MCTSConfig config) {
     double base_score;
     if (config.use_ucb1_tuned) {
-        base_score = calculate_ucb1_tuned(child);
+        base_score = calculate_ucb1_tuned(child, config);
     } else {
-        base_score = calculate_ucb1(child);
+        base_score = calculate_ucb1(child, config);
     }
     
     if (config.use_progressive_bias) {

@@ -39,7 +39,7 @@ Structured according to *Browne et al. (2012) MCTS Survey*.
 - [x] **Zobrist Hashing**: Implement incremental hashing to identify unique board states .
 - [x] **Transposition Table (DAG)**: Map identical states reached via different paths .
 - [x] **Progressive Bias**: Domain-specific heuristic knowledge added to UCB formula . (Implemented, currently disabled).
-- [ ] **First Play Urgency (FPU)**: Assign fixed high value to unvisited nodes to encourage early exploitation .
+- [x] **First Play Urgency (FPU)**: Assign fixed high value to unvisited nodes to encourage early exploitation (Section 5.2.1). (Implemented as plugin).
 - [ ] **Decisive Moves**: Immediately play moves that lead to a win or prevent an immediate loss .
 - [ ] **Opening Books**: Use expert opening databases or MCTS-generated books to guide early play .
 - [ ] **Search Seeding**: Initialize node statistics with heuristic knowledge instead of zero .

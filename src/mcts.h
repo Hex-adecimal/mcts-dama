@@ -53,6 +53,10 @@ typedef struct {
     int use_solver;             // MCTS-Solver (proven wins/losses)
     int use_progressive_bias;   // Progressive Bias
     double bias_constant;       // Weight for Progressive Bias
+
+    // First Play Urgency (Plugin)
+    int use_fpu;
+    double fpu_value;
     
     // Heuristic Weights (for rollout policy)
     struct {

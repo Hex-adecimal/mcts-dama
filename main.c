@@ -113,6 +113,8 @@ int main() {
         .use_solver = 1,
         .use_progressive_bias = 0,
         .bias_constant = DEFAULT_BIAS_CONSTANT,
+        .use_fpu = 1,
+        .fpu_value = FPU_VALUE,
         .weights = { 
             .w_capture = W_CAPTURE, 
             .w_promotion = W_PROMOTION, 

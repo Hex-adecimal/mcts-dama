@@ -10,6 +10,11 @@
 #define DRAW_SCORE          0.25
 #define LOSS_SCORE          0.0
 
+// First Play Urgency (FPU): Value assigned to unvisited nodes.
+// If too high (1e9), forces full width exploration (breadth-first locally).
+// If lower (e.g. 1.1), allows exploiting good nodes before visiting all siblings.
+#define FPU_VALUE           1.2
+
 // =============================================================================
 // MCTS DEFAULTS
 // =============================================================================

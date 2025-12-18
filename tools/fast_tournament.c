@@ -47,6 +47,8 @@ int main() {
     cfg_grandmaster.use_tt = 1;
     cfg_grandmaster.use_solver = 1;
     cfg_grandmaster.use_ucb1_tuned = 1;
+    cfg_grandmaster.use_fpu = 1;
+    cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
     int wins_gm = 0, wins_vanilla = 0, draws = 0;
