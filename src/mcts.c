@@ -1,6 +1,7 @@
 #include "mcts.h"
 #include "debug.h"
 #include "params.h"
+#include "nn.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -379,9 +380,31 @@ static double calculate_ucb1_tuned(Node *child, MCTSConfig config) {
     return mean + exploration;
 }
 
+/**
+ * Calculates the PUCT value for a node.
+ * PUCT = Q(s,a) + c_puct * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
+ */
+static double calculate_puct(Node *child, MCTSConfig config, float prior) {
+    if (child->visits == 0) {
+        return config.use_fpu ? config.fpu_value : 1e9;
+    }
+    double q_value = child->score / (double)child->visits;
+    double u_value = config.puct_c * prior * 
+                     sqrt((double)child->parent->visits) / 
+                     (1.0 + child->visits);
+    return q_value + u_value;
+}
+
 double calculate_ucb1_score(Node *child, MCTSConfig config) {
     double base_score;
-    if (config.use_ucb1_tuned) {
+    
+    // PUCT selection (if enabled and weights loaded)
+    if (config.use_puct && config.nn_weights != NULL) {
+        float prior = nn_get_move_prior((NNWeights*)config.nn_weights, 
+                                         &child->parent->state, 
+                                         &child->move_from_parent);
+        base_score = calculate_puct(child, config, prior);
+    } else if (config.use_ucb1_tuned) {
         base_score = calculate_ucb1_tuned(child, config);
     } else {
         base_score = calculate_ucb1(child, config);

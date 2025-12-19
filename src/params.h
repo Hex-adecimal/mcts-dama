@@ -5,16 +5,9 @@
 // UCB1 & SCORING
 // =============================================================================
 
-// =============================================================================
-// UCB1 & SCORING
-// =============================================================================
-
-// =============================================================================
-// UCB1 & SCORING
-// =============================================================================
-
 #define UCB1_C              1.30  // Tuned - Base is sqrt(2)
-#define WIN_SCORE           1.0
+#define PUCT_C              1.5   // PUCT exploration (AlphaZero uses ~1.5-2.5)
+#define WIN_SCORE           1.0 
 #define DRAW_SCORE          0.25
 #define LOSS_SCORE          0.0
 
@@ -58,6 +51,7 @@
 // =============================================================================
 
 // Main game (Human vs AI) - Time presets
+#define TIME_LOWER          0.05  // Very fast (for training)
 #define TIME_LOW            0.2
 #define TIME_MID            1.0
 #define TIME_HIGH           3.0
@@ -72,7 +66,7 @@
 
 // Tuner (fast games, minimal memory for speed)
 #define ARENA_SIZE_TUNER       ((size_t)256 * 1024 * 1024)    // 256MB per player
-#define TIME_TUNER             TIME_LOW
+#define TIME_TUNER             TIME_LOWER  // Fast for training
 
 // =============================================================================
 // HEURISTIC WEIGHTS (SPSA-tuned defaults)
@@ -91,5 +85,17 @@
 
 // Legacy weight (used in rollout danger check)
 #define WEIGHT_DANGER       200
+
+// =============================================================================
+// NEURAL NETWORK TRAINING
+// =============================================================================
+
+#define NN_NUM_ITERATIONS       50      // Training iterations
+#define NN_GAMES_PER_ITERATION  20      // Self-play games per iteration
+#define NN_BATCH_SIZE           32      // Training batch size
+#define NN_LEARNING_RATE        0.01f   // SGD learning rate
+#define NN_MAX_SAMPLES          50000   // Max samples in buffer
+#define NN_CHECKPOINT_INTERVAL  10      // Save weights every N iterations
+#define NN_MOMENTUM             0.9f    // Momentum coefficient for SGD
 
 #endif // PARAMS_H

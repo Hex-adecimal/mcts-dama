@@ -73,6 +73,11 @@ typedef struct {
         double w_threat;
         double w_lady_activity;
     } weights;
+
+    // PUCT Neural Network (Plugin)
+    int use_puct;          // Enable PUCT selection
+    double puct_c;         // PUCT exploration constant
+    void *nn_weights;      // Pointer to loaded NNWeights (opaque)
 } MCTSConfig;
 
 //Transposition Table: maps Zobrist Hash -> Node pointer.

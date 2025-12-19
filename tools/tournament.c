@@ -10,6 +10,7 @@
 
 #include "game.h"
 #include "mcts.h"
+#include "nn.h"
 #include "params.h"
 #include "debug.h"
 
@@ -161,6 +162,16 @@ int main() {
     printf("Parallel Execution Enabled: %d Threads\n", max_threads);
 #endif
 
+    // --- NEURAL NETWORK FOR PUCT ---
+    NNWeights nn_weights;
+    nn_init(&nn_weights, NN_INPUT_SIZE, NN_HIDDEN_SIZE, NN_OUTPUT_SIZE);
+    
+    if (nn_load_weights(&nn_weights, "bin/nn_weights.bin") == 0) {
+        printf("✓ Loaded neural network weights\n");
+    } else {
+        printf("⚠️  PUCT using random weights (run trainer first)\n");
+    }
+
     // --- CONFIGURATIONS ---
     
     // 1. Vanilla (Baseline: Pure Random Playouts)
@@ -195,23 +206,27 @@ int main() {
     cfg_grandmaster.fpu_value = FPU_VALUE;
     cfg_grandmaster.use_decaying_reward = 1;
     cfg_grandmaster.decay_factor = DEFAULT_DECAY_FACTOR;
-    cfg_grandmaster.use_progressive_bias = 1;
+    cfg_grandmaster.use_progressive_bias = 0;
     cfg_grandmaster.bias_constant = DEFAULT_BIAS_CONSTANT;
     cfg_grandmaster.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
 
-    // 7. Grandmaster No-Bias (Control Group)
-    MCTSConfig cfg_gm_nobias = cfg_grandmaster;
-    cfg_gm_nobias.use_progressive_bias = 0; // Disabled
+    // 7. PUCT (Neural Network guided selection)
+    MCTSConfig cfg_puct = cfg_vanilla;
+    cfg_puct.use_tt = 0;
+    cfg_puct.use_solver = 0;
+    cfg_puct.use_fpu = 0;
+    cfg_puct.fpu_value = FPU_VALUE;
+    cfg_puct.use_puct = 1;
+    cfg_puct.puct_c = PUCT_C;
+    cfg_puct.nn_weights = &nn_weights;
 
-    // --- PLAYER ROSTER (Comprehensive) ---
+    // --- PLAYER ROSTER ---
     TournamentPlayer players[] = {
-        { "Vanilla",    cfg_vanilla,    1200.0, 0, 0, 0, 0.0 },
-        { "Bias",       cfg_bias,       1200.0, 0, 0, 0, 0.0 },
-        { "Tuned",      cfg_tuned,      1200.0, 0, 0, 0, 0.0 },
-        { "GM-NoBias",  cfg_gm_nobias,  1200.0, 0, 0, 0, 0.0 },
-        { "GM-Full",    cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 }
+        { "Vanilla",     cfg_vanilla,     1200.0, 0, 0, 0, 0.0 },
+        { "Grandmaster", cfg_grandmaster, 1200.0, 0, 0, 0, 0.0 },
+        { "PUCT",        cfg_puct,        1200.0, 0, 0, 0, 0.0 }
     };
-    int num_players = 5;
+    int num_players = 3;
     
     int games_per_pairing = GAMES_PER_PAIRING;
     #define TIME_PER_MOVE TIME_TOURNAMENT
@@ -430,6 +445,9 @@ int main() {
     }
     printf("========================================================================\n");
     printf("Total Time: %.2f seconds\n", total_time);
+    
+    // Cleanup
+    nn_free(&nn_weights);
     
     return 0;
 }
