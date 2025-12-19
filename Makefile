@@ -47,6 +47,17 @@ tournament: $(BIN_DIR) $(OBJ_DIR)
 tuner: $(BIN_DIR) $(OBJ_DIR)
 	$(CC) $(CFLAGS) -MF $(OBJ_DIR)/tuner.d -o bin/tuner tools/tuner.c src/game.c src/mcts.c src/debug.c -lm $(LDFLAGS)
 
+# SDL2 Flags (Try standard paths or pkg-config)
+SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null || echo "-I/opt/homebrew/include -I/usr/local/include")
+SDL_LDFLAGS := $(shell pkg-config --libs sdl2 2>/dev/null || echo "-L/opt/homebrew/lib -L/usr/local/lib -lSDL2")
+
+# GUI source
+GUI_SRCS = main_gui.c src/game.c src/mcts.c src/debug.c
+GUI_TARGET = bin/game_gui
+
+gui: $(BIN_DIR) $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $(GUI_TARGET) $(GUI_SRCS) $(LDFLAGS) $(SDL_LDFLAGS)
+
 fast: $(BIN_DIR) $(OBJ_DIR)
 	$(CC) $(CFLAGS) -MF $(OBJ_DIR)/fast.d -o bin/fast tools/fast_tournament.c src/game.c src/mcts.c src/debug.c -lm $(LDFLAGS)
 

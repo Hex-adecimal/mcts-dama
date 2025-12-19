@@ -217,7 +217,7 @@ int main() {
             // AI TURN (GRANDMASTER)
              printf("Il Grandmaster sta pensando...\n");
             
-            double time_limit = (state.current_player == WHITE) ? TIME_HIGH : TIME_HIGH;
+            double time_limit = (state.current_player == WHITE) ? TIME_LOW : TIME_LOW;
             
             // Search
             chosen_move = mcts_search(root, &mcts_arena, time_limit, config, NULL, &root);
