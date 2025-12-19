@@ -622,6 +622,12 @@ static void backpropagate(Node *node, double result, int use_solver) {
         node->score += result;
         node->sum_sq_score += (result * result);
 
+        // >>> PROGRESSIVE HISTORY UPDATE <<<
+        // Non aggiornare la root (non ha una mossa associata)
+        if (node->parent != NULL) {
+            history_update(node->move, result);
+        }
+
         // SOLVER UPDATE
         if (use_solver) {
             if (child == NULL || child->status != SOLVED_NONE) {
@@ -630,14 +636,13 @@ static void backpropagate(Node *node, double result, int use_solver) {
         }
 
         // CRITICAL: Flip perspective for the parent node!
-        // In a two-player game, if this node's player won (result=1),
-        // that means the parent's player lost (result=0), and vice versa.
         result = 1.0 - result;
 
         child = node; // Move up
         node = node->parent;
     }
 }
+
 
 // ================================================================================================
 //  PUBLIC API

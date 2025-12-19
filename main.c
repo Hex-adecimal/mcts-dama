@@ -9,6 +9,9 @@
 #include "debug.h"
 #include "params.h"
 
+//history
+#include "history.h"
+
 // Parse "A3" -> 0-63 index
 // Returns -1 on error
 int parse_square(const char *str) {
@@ -68,6 +71,10 @@ void display_moves(const MoveList *list, Node *root) {
 }
 
 int main() {
+
+    //history
+    history_init();
+
     zobrist_init();
     init_move_tables();
     srand(time(NULL));
