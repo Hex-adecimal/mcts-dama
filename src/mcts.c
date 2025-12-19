@@ -2,6 +2,9 @@
 #include "debug.h"
 #include "params.h"
 
+#include "history.h"
+
+
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>

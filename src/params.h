@@ -92,4 +92,7 @@
 // Legacy weight (used in rollout danger check)
 #define WEIGHT_DANGER       200
 
+//Per la history
+#define HISTORY_WEIGHT 0.1
+
 #endif // PARAMS_H

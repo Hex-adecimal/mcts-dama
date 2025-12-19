@@ -61,7 +61,7 @@ void print_board(const GameState *state) {
     printf("   A B C D E F G H\n\n");
     
     printf("Turn: %s\n", (state->current_player == WHITE) ? "WHITE" : "BLACK");
-    printf("White pieces bitboard: %llu\n", state->white_pieces);
+    printf("White pieces bitboard: %lu\n", state->white_pieces);
 }
 
 /**
