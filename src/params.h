@@ -2,100 +2,97 @@
 #define PARAMS_H
 
 // =============================================================================
-// UCB1 & SCORING
+// GAME LIMITS
 // =============================================================================
 
-#define UCB1_C              1.30  // Tuned - Base is sqrt(2)
-#define PUCT_C              1.5   // PUCT exploration (AlphaZero uses ~1.5-2.5)
-#define WIN_SCORE           1.0 
-#define DRAW_SCORE          0.25
-#define LOSS_SCORE          0.0
-
-// First Play Urgency (FPU): Value assigned to unvisited nodes.
-// If too high (1e9), forces full width exploration (breadth-first locally).
-#define FPU_VALUE           100.0
-
-// Decaying Reward: Discount factor for rewards based on simulation depth.
-// 0.999 means reward decays by .1% per move in rollout. Encourages fast wins.
-#define DEFAULT_DECAY_FACTOR 0.999
+#define MAX_MOVES                   64      // Max legal moves per position
+#define MAX_CAPTURES                12      // Max captures in a chain
+#define MAX_MOVES_WITHOUT_CAPTURES  40      // Forced draw after this
 
 // =============================================================================
-// MCTS DEFAULTS
+// MCTS - EXPLORATION & SCORING
 // =============================================================================
 
-#define DEFAULT_ROLLOUT_EPSILON  0.2
-#define ROLLOUT_EPSILON_SMART    0.1    
-#define ROLLOUT_EPSILON_RANDOM   1.0    
+#define UCB1_C                  1.30        // UCB1 exploration (tuned, base: sqrt(2))
+#define PUCT_C                  3.0         // PUCT exploration (AlphaZero: ~1.5-2.5)
+#define WIN_SCORE               1.0 
+#define DRAW_SCORE              0.25
+#define LOSS_SCORE              0.0
 
-#define EXPANSION_THRESHOLD      0
-#define DEFAULT_USE_LOOKAHEAD    1
-#define DEFAULT_TREE_REUSE       1
-#define DEFAULT_BIAS_CONSTANT    1.2  // Tuned (Run 2). Note: Progressive Bias disabled in GM by default.
+// First Play Urgency: Value for unvisited nodes
+#define FPU_VALUE               100.0
 
-// =============================================================================
-// LIMITS
-// =============================================================================
-
-#define MAX_ROLLOUT_DEPTH        200    // Max simulation depth
-#define MAX_GAME_TURNS           150    // Max turns before forced draw
-#define MAX_GAME_TURNS_TUNER     400    // Safety limit for tuner
-
-// Tournament settings
-// Sample size for ±5% precision @ 95% CI: n = (1.96² × 0.5 × 0.5) / 0.05² ≈ 385
-// Sample size for ±10% precision @ 90% CI: n = (1.645² × 0.5 × 0.5) / 0.05² ≈ 100
-#define GAMES_PER_PAIRING        100    // Full tournament: games per pairing
-#define GAMES_FAST               100    // Fast 1v1 tournament vs Vanilla
+// Decaying Reward: Discount per rollout step (.999 = 0.1% decay)
+#define DEFAULT_DECAY_FACTOR    0.999
 
 // =============================================================================
-// TIME & MEMORY
+// MCTS - ROLLOUT CONFIGURATION
 // =============================================================================
 
-// Main game (Human vs AI) - Time presets
-#define TIME_LOWER          0.05  // Very fast (for training)
-#define TIME_LOW            0.2
-#define TIME_MID            1.0
-#define TIME_HIGH           3.0
+#define DEFAULT_ROLLOUT_EPSILON     0.2     // Epsilon-greedy probability
+#define ROLLOUT_EPSILON_SMART       0.1     // Greedy (10% random)
+#define ROLLOUT_EPSILON_HEURISTIC   0.0     // 100% Heuristic
+#define ROLLOUT_EPSILON_RANDOM      1.0     // Fully random
+#define ROLLOUT_EPSILON_NN          0.0     // No rollouts (Neural Net only)
 
-#define ARENA_SIZE          ((size_t)8 * 1024 * 1024 * 1024)  // 8GB
-#define TIME_WHITE          TIME_HIGH
-#define TIME_BLACK          TIME_HIGH
-
-// Tournament (faster games, large memory)
-#define ARENA_SIZE_TOURNAMENT  ((size_t)4 * 1024 * 1024 * 1024)   // 4GB per player
-#define TIME_TOURNAMENT        TIME_LOW
-
-// Tuner (fast games, minimal memory for speed)
-#define ARENA_SIZE_TUNER       ((size_t)256 * 1024 * 1024)    // 256MB per player
-#define TIME_TUNER             TIME_LOWER  // Fast for training
+#define EXPANSION_THRESHOLD         0
+#define DEFAULT_USE_LOOKAHEAD       1
+#define DEFAULT_TREE_REUSE          1
+#define DEFAULT_USE_TT              1
+#define DEFAULT_USE_SOLVER          1
+#define DEFAULT_USE_UCB1_TUNED      1
+#define DEFAULT_USE_FPU             1
+#define DEFAULT_USE_DECAY           1
+#define DEFAULT_BIAS_CONSTANT       1.2     // Progressive bias constant
 
 // =============================================================================
-// HEURISTIC WEIGHTS (SPSA-tuned defaults)
-// =============================================================================
-// These are the optimized weights from SPSA tuning with corrected MCTS.
-// Used by main.c and can be used as starting point for tuner.c.
-
-#define W_CAPTURE           9.85
-#define W_PROMOTION         4.89
-#define W_ADVANCE           1.36  // Significant increase (was 0.43)
-#define W_CENTER            2.31
-#define W_EDGE              0.90  // Significant decrease (was 1.59)
-#define W_BASE              1.53  // Increased
-#define W_THREAT            9.74
-#define W_LADY_ACTIVITY     5.12
-
-// Legacy weight (used in rollout danger check)
-#define WEIGHT_DANGER       200
-
-// =============================================================================
-// NEURAL NETWORK TRAINING
+// MCTS - LIMITS
 // =============================================================================
 
-#define NN_NUM_ITERATIONS       50      // Training iterations
-#define NN_GAMES_PER_ITERATION  20      // Self-play games per iteration
-#define NN_BATCH_SIZE           32      // Training batch size
-#define NN_LEARNING_RATE        0.01f   // SGD learning rate
-#define NN_MAX_SAMPLES          50000   // Max samples in buffer
-#define NN_CHECKPOINT_INTERVAL  10      // Save weights every N iterations
-#define NN_MOMENTUM             0.9f    // Momentum coefficient for SGD
+#define MAX_ROLLOUT_DEPTH       200         // Max simulation depth
+#define MAX_GAME_TURNS          200         // Max turns before forced draw
+#define MAX_GAME_TURNS_TUNER    400         // Safety limit for tuner
+
+// =============================================================================
+// TIME BUDGETS (seconds)
+// =============================================================================
+
+#define TIME_LOWER              0.05        // Very fast (training/tuning)
+#define TIME_LOW                0.2         // Fast (tournament)
+#define TIME_MID                1.0         // Medium
+#define TIME_HIGH               3.0         // Strong play
+
+// Per-player defaults
+#define TIME_WHITE              TIME_HIGH
+#define TIME_BLACK              TIME_HIGH
+
+// =============================================================================
+// MEMORY BUDGETS
+// =============================================================================
+
+#define ARENA_SIZE              ((size_t)8 * 1024 * 1024 * 1024)    // 8GB (game)
+#define ARENA_SIZE_TOURNAMENT   ((size_t)4 * 1024 * 1024 * 1024)    // 4GB (tournament)
+#define ARENA_SIZE_TUNER        ((size_t)256 * 1024 * 1024)         // 256MB (tuner)
+
+// =============================================================================
+// HEURISTIC WEIGHTS (SPSA-tuned)
+// =============================================================================
+
+#define W_CAPTURE               9.85
+#define W_PROMOTION             4.89
+#define W_ADVANCE               1.36
+#define W_CENTER                2.31
+#define W_EDGE                  0.90
+#define W_BASE                  1.53
+#define W_THREAT                9.74
+#define W_LADY_ACTIVITY         5.12
+#define WEIGHT_DANGER           200         // Rollout danger penalty
+
+// =============================================================================
+// MCTS - THREADING
+// =============================================================================
+
+#define NUM_MCTS_THREADS        4           // Number of async MCTS worker threads
+#define MCTS_BATCH_SIZE         64          // Max batch size for Async MCTS inference
 
 #endif // PARAMS_H

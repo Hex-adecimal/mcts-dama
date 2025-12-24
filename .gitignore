@@ -26,3 +26,9 @@ Thumbs.db
 
 # Test artifacts
 test_output.txt
+
+# ML Data & Models & Logs
+data/
+models/
+logs/
+training_log.txt
