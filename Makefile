@@ -51,13 +51,9 @@ all: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
 main: all
 .PHONY: main
 
-# Main CLI game
-$(TARGET): $(OBJ_DIR)/apps/cli/dama_cli.o $(LIB_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-
-$(OBJ_DIR)/apps/cli/dama_cli.o: apps/cli/dama_cli.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Unified CLI (main binary)
+$(TARGET): $(BIN_DIR) $(OBJ_DIR)
+	$(CC) $(CFLAGS) -o $@ apps/cli/main.c $(LIB_SRCS) $(LDFLAGS)
 
 # Tournament (Combined CNN/Legacy)
 tournament: $(BIN_DIR) $(OBJ_DIR)
