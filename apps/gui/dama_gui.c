@@ -79,7 +79,7 @@ int advisor_runner(void *data) {
     // Run MCTS (GM)
     arena_reset(&advisor_arena);
     Node *adv_root = mcts_create_root(local_state, &advisor_arena, config_advisor);
-    Move adv_move = mcts_search(adv_root, &advisor_arena, TIME_HIGH, config_advisor, NULL, NULL);
+    Move adv_move = mcts_search(adv_root, &advisor_arena, 3.0, config_advisor, NULL, NULL); // 60s fallback, node limit used
 
     // Output Result
     if (adv_move.path[0] != 0 || adv_move.length > 0) {
@@ -219,7 +219,7 @@ void ai_move() {
     
     Node *new_root = NULL;
 
-    Move best_move = mcts_search(root, &mcts_arena, 5.0, active_config, NULL, &new_root);
+    Move best_move = mcts_search(root, &mcts_arena, 5.0, active_config, NULL, &new_root); // 60s fallback, node limit used
     
     if (best_move.path[0] == 0 && best_move.path[1] == 0 && best_move.length == 0) {
         printf("AI Resigns (No valid moves).\n");
@@ -314,7 +314,7 @@ int main(void) {
         .use_ucb1_tuned = 1,
         .use_tt = 1,
         .use_solver = 1,
-        .use_progressive_bias = 0,
+        .use_progressive_bias = 1,
         .bias_constant = DEFAULT_BIAS_CONSTANT,
         .use_fpu = 1,
         .fpu_value = FPU_VALUE,
@@ -354,15 +354,15 @@ int main(void) {
 
     config_cnn = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO);
     config_cnn.cnn_weights = &cnn_weights;
-    //config_cnn.max_nodes = 800; // Fast but smart
+    config_cnn.max_nodes = 2000; // 2000 iterations per move
 
     // 4. Config Advisor (Upgrade to CNN if available)
     if (loaded) {
         config_advisor = config_cnn;
-        //config_advisor.max_nodes = 1600; // Stronger for advice
-        // Using AlphaZero advisor
+        config_advisor.max_nodes = 2000; // Stronger for advice
     } else {
         config_advisor = config_gm;
+        config_advisor.max_nodes = 1000;
     }
     // Just to be sure, using TIME_MID in mcts_search, config is same.
 

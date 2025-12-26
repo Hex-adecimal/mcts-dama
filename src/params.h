@@ -14,7 +14,7 @@
 // =============================================================================
 
 #define UCB1_C                  1.30        // UCB1 exploration (tuned, base: sqrt(2))
-#define PUCT_C                  3.0         // PUCT exploration (AlphaZero: ~1.5-2.5)
+#define PUCT_C                  1.5         // PUCT exploration (AlphaZero: ~1.5-2.5)
 #define WIN_SCORE               1.0 
 #define DRAW_SCORE              0.25
 #define LOSS_SCORE              0.0
@@ -37,7 +37,7 @@
 
 #define EXPANSION_THRESHOLD         0
 #define DEFAULT_USE_LOOKAHEAD       1
-#define DEFAULT_TREE_REUSE          1
+#define DEFAULT_TREE_REUSE          0
 #define DEFAULT_USE_TT              1
 #define DEFAULT_USE_SOLVER          1
 #define DEFAULT_USE_UCB1_TUNED      1

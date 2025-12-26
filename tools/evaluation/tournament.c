@@ -51,7 +51,7 @@ double expected_score(double elo_a, double elo_b) {
  * @return Winner color (WHITE, BLACK, or -1 for draw).
  */
 int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
-               MCTSStats *stats_white, MCTSStats *stats_black) {
+               MCTSStats *stats_white, MCTSStats *stats_black, double time_limit) {
     GameState state;
     init_game(&state);
     
@@ -123,7 +123,6 @@ int play_match(MCTSConfig *config_white, MCTSConfig *config_black, Arena *arena,
                 chosen_move = (Move){0};
             }
         } else {
-            double time_limit = (config->use_puct) ? 1.0 : 0.05;
             Node *new_root = NULL;
             chosen_move = mcts_search(root, arena, time_limit, *config, stats, &new_root);
             
@@ -151,7 +150,8 @@ typedef struct {
     int losses;
     int draws;
     double points; // 1.0 per win, 0.5 per draw
-    long long total_nodes;
+    long long total_iters;      // Thread iterations
+    long long tree_nodes;       // Unique tree nodes
     double total_time;
     long long total_moves;
 } TournamentPlayer;
@@ -273,6 +273,11 @@ int main(int argc, char *argv[]) {
                 return 0;
         }
     }
+    
+    // If using node limit, set a large time fallback
+    if (node_limit > 0) {
+        time_limit = 600.0; // 10 minutes fallback (node limit should hit first)
+    }
 
     zobrist_init();
     init_move_tables();
@@ -319,6 +324,7 @@ int main(int argc, char *argv[]) {
     MCTSConfig cfg_grandmaster = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
     MCTSConfig cfg_cnn         = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO);
     cfg_cnn.cnn_weights = &cnn_weights;
+    cfg_grandmaster.cnn_weights = &cnn_weights; // Grandmaster also uses CNN
 
     MCTSConfig cfg_tt_only     = mcts_get_preset(MCTS_PRESET_TT_ONLY);
     MCTSConfig cfg_solver_only = mcts_get_preset(MCTS_PRESET_SOLVER_ONLY);
@@ -345,23 +351,22 @@ int main(int argc, char *argv[]) {
 
     // --- PLAYER ROSTER ---
     TournamentPlayer players[] = {
-        { "PureVanilla",  cfg_pure,         1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Vanilla",      cfg_vanilla,      1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Grandmaster",  cfg_grandmaster,  1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { weights_loaded ? "CNN-PUCT (TRAINED)" : "CNN-PUCT (BRAINLESS)", cfg_cnn, 1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "TT-Only",      cfg_tt_only,      1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Solver-Only",  cfg_solver_only,  1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Tuned-Only",   cfg_tuned_only,   1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "FPU-Only",     cfg_fpu_only,     1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Decay-Only",   cfg_decay_only,   1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "LookAhead",    cfg_lookahead,    1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "TreeReuse",    cfg_reuse,        1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "WeightsOnly",  cfg_weights,      1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "SmartRoll",    cfg_smartroll,    1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "ProgBias",     cfg_progbias,     1200.0, 0, 0, 0, 0.0, 0, 0, 0 },
-        { "Random Bot",   cfg_random,       800.0,  0, 0, 0, 0.0, 0, 0, 0 }
+        { "PureVanilla",  cfg_pure,         1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "Vanilla",      cfg_vanilla,      1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "Grandmaster",  cfg_grandmaster,  1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { weights_loaded ? "CNN-PUCT (TRAINED)" : "CNN-PUCT (BRAINLESS)", cfg_cnn, 1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "TT-Only",      cfg_tt_only,      1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "Solver-Only",  cfg_solver_only,  1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "Tuned-Only",   cfg_tuned_only,   1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "FPU-Only",     cfg_fpu_only,     1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "Decay-Only",   cfg_decay_only,   1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "LookAhead",    cfg_lookahead,    1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "TreeReuse",    cfg_reuse,        1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "WeightsOnly",  cfg_weights,      1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "SmartRoll",    cfg_smartroll,    1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 },
+        { "ProgBias",     cfg_progbias,     1200.0, 0, 0, 0, 0.0, 0, 0, 0.0, 0 }
     };
-    int num_players = NUM_PLAYERS_EXPECTED + 1;
+    int num_players = NUM_PLAYERS_EXPECTED;
     
     double start_time = (double)clock();
     
@@ -383,11 +388,11 @@ int main(int argc, char *argv[]) {
             int wins_B = 0;
             int draws = 0;
             
-            long long total_nodes_A = 0, total_depth_A = 0, total_moves_A = 0;
-            long long total_nodes_B = 0, total_depth_B = 0, total_moves_B = 0;
+            long long total_iters_A = 0, total_depth_A = 0, total_moves_A = 0, tree_nodes_A = 0, memory_A = 0;
+            long long total_iters_B = 0, total_depth_B = 0, total_moves_B = 0, tree_nodes_B = 0, memory_B = 0;
             double total_time_A = 0.0, total_time_B = 0.0;
             
-            #pragma omp parallel for reduction(+:wins_A, wins_B, draws, total_nodes_A, total_depth_A, total_moves_A, total_nodes_B, total_depth_B, total_moves_B, total_time_A, total_time_B) schedule(dynamic)
+            #pragma omp parallel for reduction(+:wins_A, wins_B, draws, total_iters_A, total_depth_A, total_moves_A, total_iters_B, total_depth_B, total_moves_B, total_time_A, total_time_B, tree_nodes_A, tree_nodes_B, memory_A, memory_B) schedule(dynamic)
             for (int game = 0; game < games_per_pairing; game++) {
                 GameState state;
                 init_game(&state);
@@ -530,14 +535,17 @@ int main(int argc, char *argv[]) {
                     move_count++;
                 }
                 
-                // Aggregate game stats to reduction variables
-                total_nodes_A += stats_A.total_iterations;
+                total_iters_A += stats_A.total_iterations;
                 total_depth_A += stats_A.total_depth;
                 total_moves_A += stats_A.total_moves;
+                tree_nodes_A += stats_A.total_nodes;
+                memory_A += stats_A.total_memory;
                 
-                total_nodes_B += stats_B.total_iterations;
+                total_iters_B += stats_B.total_iterations;
                 total_depth_B += stats_B.total_depth;
                 total_moves_B += stats_B.total_moves;
+                tree_nodes_B += stats_B.total_nodes;
+                memory_B += stats_B.total_memory;
                 
                 total_time_A += stats_A.total_time;
                 total_time_B += stats_B.total_time;
@@ -550,23 +558,26 @@ int main(int argc, char *argv[]) {
             printf("\n");
             // --- PRINT MATCH STATISTICS ---
             printf("\n");
-            printf("   > %-18s Stats: %s Nodes/Move, Depth %.1f, %s iter/sec\n", 
+            printf("   > %-18s Stats: %s iter/move, %s nodes, %.1f KB mem, Depth %.1f\n", 
                    pA->name, 
-                   (total_moves_A > 0) ? format_thousands(total_nodes_A / total_moves_A) : "0", 
-                   (total_moves_A > 0) ? (double)total_depth_A / total_moves_A : 0, 
-                   (total_time_A > 0.001) ? format_thousands((long long)(total_nodes_A / total_time_A)) : "0");
-            printf("   > %-18s Stats: %s Nodes/Move, Depth %.1f, %s iter/sec\n", 
+                   (total_moves_A > 0) ? format_thousands(total_iters_A / total_moves_A) : "0",
+                   (total_moves_A > 0) ? format_thousands(tree_nodes_A / total_moves_A) : "0",
+                   (total_moves_A > 0) ? (double)memory_A / total_moves_A / 1024.0 : 0,
+                   (total_moves_A > 0) ? (double)total_depth_A / total_moves_A : 0);
+            printf("   > %-18s Stats: %s iter/move, %s nodes, %.1f KB mem, Depth %.1f\n", 
                    pB->name, 
-                   (total_moves_B > 0) ? format_thousands(total_nodes_B / total_moves_B) : "0", 
-                   (total_moves_B > 0) ? (double)total_depth_B / total_moves_B : 0, 
-                   (total_time_B > 0.001) ? format_thousands((long long)(total_nodes_B / total_time_B)) : "0");
+                   (total_moves_B > 0) ? format_thousands(total_iters_B / total_moves_B) : "0", 
+                   (total_moves_B > 0) ? format_thousands(tree_nodes_B / total_moves_B) : "0",
+                   (total_moves_B > 0) ? (double)memory_B / total_moves_B / 1024.0 : 0,
+                   (total_moves_B > 0) ? (double)total_depth_B / total_moves_B : 0);
             
             // --- UPDATE STATS ---
             pA->wins += wins_A;
             pA->losses += wins_B;
             pA->draws += draws;
             pA->points += wins_A + (0.5 * draws);
-            pA->total_nodes += total_nodes_A;
+            pA->total_iters += total_iters_A;
+            pA->tree_nodes += tree_nodes_A;
             pA->total_time += total_time_A;
             pA->total_moves += total_moves_A;
             
@@ -574,7 +585,8 @@ int main(int argc, char *argv[]) {
             pB->losses += wins_A;
             pB->draws += draws;
             pB->points += wins_B + (0.5 * draws);
-            pB->total_nodes += total_nodes_B;
+            pB->total_iters += total_iters_B;
+            pB->tree_nodes += tree_nodes_B;
             pB->total_time += total_time_B;
             pB->total_moves += total_moves_B;
             
@@ -603,7 +615,7 @@ int main(int argc, char *argv[]) {
     
     printf("\n\n");
     printf("┌──────┬────────────────────────┬────────┬──────┬──────┬──────┬──────┬────────────┬────────────┬──────────┐\n");
-    printf("│ Rank │ Name                   │ Points │ Wins │ Loss │ Draw │ ELO  │ Nodes/Move │ iter/sec   │ Win Rate │\n");
+    printf("│ Rank │ Name                   │ Points │ Wins │ Loss │ Draw │ ELO  │ iter/Move  │ Nodes/Move │ Win Rate │\n");
     printf("├──────┼────────────────────────┼────────┼──────┼──────┼──────┼──────┼────────────┼────────────┼──────────┤\n");
     
     for (int i = 0; i < num_players; i++) {
@@ -611,12 +623,12 @@ int main(int argc, char *argv[]) {
         int total_games = p->wins + p->losses + p->draws;
         double win_rate = (total_games > 0) ? 100.0 * p->wins / total_games : 0.0;
         
-        long long avg_nodes = (p->total_moves > 0) ? p->total_nodes / p->total_moves : 0;
-        long long nps = (p->total_time > 0.001) ? (long long)(p->total_nodes / p->total_time) : 0;
+        long long avg_iters = (p->total_moves > 0) ? p->total_iters / p->total_moves : 0;
+        long long avg_nodes = (p->total_moves > 0) ? p->tree_nodes / p->total_moves : 0;
 
         printf("│ %-4d │ %-22s │ %-6.1f │ %-4d │ %-4d │ %-4d │ %-4.0f │ %-10s │ %-10s │ %5.1f%%   │\n", 
                i+1, p->name, p->points, p->wins, p->losses, p->draws, p->elo, 
-               format_thousands(avg_nodes), format_thousands(nps), win_rate);
+               format_thousands(avg_iters), format_thousands(avg_nodes), win_rate);
     }
     printf("└──────┴────────────────────────┴────────┴──────┴──────┴──────┴──────┴────────────┴────────────┴──────────┘\n");
     printf("Total Execution Time: %.2f seconds\n", total_time);

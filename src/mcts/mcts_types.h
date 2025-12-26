@@ -101,7 +101,8 @@ typedef struct Node {
 
 typedef struct {
     int total_moves;
-    long total_iterations;
+    long total_iterations;      // Thread-level iterations (all threads combined)
+    long total_nodes;           // Unique tree nodes created
     long current_move_iterations;
     long total_depth;
     double total_time;

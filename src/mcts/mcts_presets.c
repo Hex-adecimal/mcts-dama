@@ -35,15 +35,14 @@ MCTSConfig mcts_get_preset(MCTSPreset preset) {
             break;
 
         case MCTS_PRESET_GRANDMASTER:
-            cfg.use_lookahead = DEFAULT_USE_LOOKAHEAD;
-            cfg.use_tree_reuse = DEFAULT_TREE_REUSE;
-            cfg.use_ucb1_tuned = DEFAULT_USE_UCB1_TUNED;
-            cfg.use_tt = DEFAULT_USE_TT;
+            // Minimal but powerful: PUCT + Progressive Bias + Solver
+            cfg.use_puct = 1;
+            cfg.puct_c = PUCT_C;
+            cfg.rollout_epsilon = ROLLOUT_EPSILON_NN; // No rollouts when CNN available
             cfg.use_solver = DEFAULT_USE_SOLVER;
-            cfg.use_fpu = DEFAULT_USE_FPU;
-            cfg.fpu_value = FPU_VALUE;
-            cfg.use_decaying_reward = DEFAULT_USE_DECAY;
-            cfg.decay_factor = DEFAULT_DECAY_FACTOR;
+            cfg.use_progressive_bias = 1;
+            cfg.bias_constant = DEFAULT_BIAS_CONSTANT;
+            apply_weights(&cfg);
             break;
 
         case MCTS_PRESET_ALPHA_ZERO:

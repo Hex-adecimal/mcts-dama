@@ -54,6 +54,15 @@ int get_tree_depth(Node *node) {
     return max_depth + 1;
 }
 
+int get_tree_node_count(Node *node) {
+    if (!node) return 0;
+    int count = 1; // This node
+    for (int i = 0; i < node->num_children; i++) {
+        count += get_tree_node_count(node->children[i]);
+    }
+    return count;
+}
+
 // =============================================================================
 // ASYNC BATCHING INFRASTRUCTURE
 // =============================================================================
@@ -111,6 +120,7 @@ void *mcts_worker(void *arg) {
              else result = config.draw_score;
              
              backpropagate(leaf, result, config.use_solver);
+             if (args->local_stats) args->local_stats->total_iterations++;
              continue;
         }
 
@@ -429,6 +439,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     
     if (stats) {
         stats->total_iterations += iter_this_move;
+        stats->total_nodes += get_tree_node_count(root); // Count tree nodes
         stats->current_move_iterations = iter_this_move;
         
         stats->total_moves++;
