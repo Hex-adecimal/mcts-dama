@@ -4,12 +4,12 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     CC = clang
     LIBOMP_PREFIX = /opt/homebrew/opt/libomp
-    CFLAGS = -Wall -Wextra -std=c99 -O3 -ffast-math -mcpu=apple-m2 -flto -funroll-loops -MMD -MP -I_src -I_src/core -I_src/mcts -I_src/nn 
+    CFLAGS = -Wall -Wextra -std=c99 -O3 -ffast-math -mcpu=apple-m2 -flto -funroll-loops -MMD -MP -Isrc -Isrc/core -Isrc/mcts -Isrc/nn -Isrc/ui
     CFLAGS += -Xclang -fopenmp -I$(LIBOMP_PREFIX)/include -DACCELERATE_NEW_LAPACK
     LDFLAGS = -lm -L$(LIBOMP_PREFIX)/lib -lomp -framework Accelerate
 else
     CC = gcc
-    CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -I_src -I_src/core -I_src/mcts -I_src/nn 
+    CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Isrc -Isrc/core -Isrc/mcts -Isrc/nn -Isrc/ui 
     CFLAGS += -fopenmp
     LDFLAGS = -lm -fopenmp
 endif
@@ -22,13 +22,13 @@ BIN_DIR = bin
 # =============================================================================
 
 # Core module
-CORE_SRCS = _src/core/game.c _src/core/movegen.c
+CORE_SRCS = src/core/game.c src/core/movegen.c
 
 # MCTS module (consolidated from 7 files to 3)
-MCTS_SRCS = _src/mcts/mcts.c _src/mcts/mcts_tree.c _src/mcts/mcts_rollout.c
+MCTS_SRCS = src/mcts/mcts.c src/mcts/mcts_tree.c src/mcts/mcts_rollout.c src/mcts/tournament.c
 
 # NN module
-NN_SRCS = _src/nn/dataset.c _src/nn/cnn_core.c _src/nn/cnn_inference.c _src/nn/cnn_training.c _src/nn/conv_ops.c
+NN_SRCS = src/nn/dataset.c src/nn/dataset_analysis.c src/nn/selfplay.c src/nn/training_pipeline.c src/nn/cnn_core.c src/nn/cnn_inference.c src/nn/cnn_training.c src/nn/conv_ops.c
 
 # All library sources
 LIB_SRCS = $(CORE_SRCS) $(MCTS_SRCS) $(NN_SRCS)
@@ -50,9 +50,9 @@ main: all
 .PHONY: main
 
 # Unified CLI (main binary)
-CLI_SRCS = _apps/cli/cmd_data.c _apps/cli/cmd_train.c _apps/cli/cmd_tournament.c
-$(TARGET): $(BIN_DIR) $(OBJ_DIR) _apps/cli/main.c $(CLI_SRCS)
-	$(CC) $(CFLAGS) -o $@ _apps/cli/main.c $(LIB_SRCS) $(LDFLAGS)
+CLI_SRCS = src/ui/cli_view.c apps/cli/cmd_data.c apps/cli/cmd_train.c apps/cli/cmd_tournament.c
+$(TARGET): $(BIN_DIR) $(OBJ_DIR) apps/cli/main.c $(CLI_SRCS)
+	$(CC) $(CFLAGS) -o $@ apps/cli/main.c $(LIB_SRCS) $(LDFLAGS)
 
 # Tournament (legacy tool)
 tournament: $(BIN_DIR) $(OBJ_DIR)
