@@ -3,19 +3,19 @@ trigger: model_decision
 description: After modifying C files, verify consistency of comments, constants, and style
 ---
 
-# Post-Edit Verification Checklist
+# Post-Edit Verification
 
-After modifying a C file, verify:
+After modifying C files:
 
-## Style Consistency
-- [ ] No trivial comments on obvious struct fields or assignments
-- [ ] Constants are in the appropriate location (params.h for globals, local for file-specific)
-- [ ] Comments follow the project style (English, section headers with `// ---` or `// ===`)
+## Style
+- [ ] No trivial comments on obvious fields/assignments
+- [ ] Constants in right place (params.h for globals, local for file-specific)
+- [ ] Comments follow style (English, `// ---` or `// ===` headers)
 
-## Code Quality
+## Quality
 - [ ] No orphaned code (unused functions, dead #defines)
-- [ ] New includes are necessary and in alphabetical order within groups
-- [ ] Error handling is consistent with existing code
+- [ ] New includes necessary and alphabetically ordered
+- [ ] Error handling consistent with existing code
 
-## Compile Check
-- Always run `make` after edits to catch errors early
+## Compile
+- [ ] Always run `make` after edits

@@ -10,10 +10,12 @@
 #include "../../src/nn/selfplay.h"
 #include "../../src/nn/training_pipeline.h"
 #include "../../src/core/movegen.h"
+#include "../../src/params.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -36,8 +38,10 @@ static void sp_on_progress(int completed, int total, int w, int l, int d) {
 }
 
 static void sp_on_game_complete(int g, int total, int res, int moves, int reason) {
-    (void)g; (void)total; (void)res; (void)moves; (void)reason;
-    // Optional: Log every game to debug file?
+    const char* winners[] = {"Draw ", "White", "Black"};
+    const char* reasons[] = {"Normal", "Resign", "Mercy ", "Stale ", "MaxMov", "Repet "};
+    printf("\n  > Game %3d/%3d | Result: %s | Moves: %3d | Case: %s", 
+           g + 1, total, winners[res], moves, reasons[reason]);
 }
 
 // --- Training Callbacks ---
@@ -52,18 +56,19 @@ static void tr_on_epoch_start(int epoch, int total, float lr) {
     log_printf("----------------------------------------------------------------\n");
 }
 
-static void tr_on_batch(int b, int total, float loss, int samples) {
+static void tr_on_batch(int b, int total, float p_loss, float v_loss, int samples) {
     if (b % 10 == 0 || b == total - 1) {
-        printf("\rBatch %d/%d | Loss: %.4f | Samples: %d", b, total, loss, samples);
+        printf("\rBatch %d/%d | P:%.4f V:%.4f | Samples: %d", b, total, p_loss, v_loss, samples);
         fflush(stdout);
     }
 }
 
-static void tr_on_epoch_end(int epoch, float avg_loss, float val_loss, float val_acc, int improved, const char *path) {
+static void tr_on_epoch_end(int epoch, float train_p, float train_v, float val_p, float val_v, float val_acc, int improved, const char *path) {
     (void)epoch;
     printf("\n"); // Clear progress line
-    log_printf("Train Loss: %.4f | Val Loss: %.4f | Val Acc: %.1f%%\n", 
-               avg_loss, val_loss, val_acc * 100.0f);
+    log_printf("Train | Policy: %.4f  Value: %.4f  Total: %.4f\n", train_p, train_v, train_p + train_v);
+    log_printf("Valid | Policy: %.4f  Value: %.4f  Total: %.4f | Acc: %.1f%%\n", 
+               val_p, val_v, val_p + val_v, val_acc * 100.0f);
     
     if (improved) {
         log_printf(">> New best model saved to %s\n", path ? path : "buffer");
@@ -72,12 +77,21 @@ static void tr_on_epoch_end(int epoch, float avg_loss, float val_loss, float val
     }
 }
 
+// Static storage for training metrics
+static time_t training_start_time = 0;
+static const char *training_model_path = NULL;
+static int training_total_samples = 0;
+
 static void tr_on_complete(float best, int epoch) {
+    (void)epoch;
+    double elapsed = difftime(time(NULL), training_start_time);
+    double sps = (elapsed > 0) ? (double)training_total_samples / elapsed : 0;
+    
     TrainingResultView view = {
-        .weights_file = "checkpoints", // Placeholder or pass path
+        .weights_file = training_model_path ? training_model_path : "N/A",
         .best_loss = best,
-        .training_time = 0, 
-        .samples_per_sec = 0
+        .training_time = elapsed, 
+        .samples_per_sec = sps
     };
     cli_view_print_training_complete(&view);
 }
@@ -105,23 +119,24 @@ int cmd_train(int argc, char **argv) {
         .max_moves = 200,
         .time_limit = 0.5, // Not used much if using nodes
         .temp = 1.0f,
-        .output_file = "out/data/selfplay.dat",
+        .output_file = "out/data/active.dat",
         .parallel_threads = get_max_threads(),
         .mercy = { .threshold = 3.0f, .check_interval = 10 },
         .overwrite_data = 0,
         .on_start = sp_on_start,
         .on_progress = sp_on_progress,
-        .on_game_complete = sp_on_game_complete
+        .on_game_complete = sp_on_game_complete,
+        .endgame_prob = 0.0f
     };
     
     TrainingPipelineConfig tr_cfg = {
-        .epochs = 10,
-        .batch_size = 64,
-        .learning_rate = 0.0005f,
-        .l2_decay = 1e-4f,
-        .momentum = 0.9f,
-        .patience = 5,
-        .data_path = "out/data/selfplay.dat",
+        .epochs = CNN_DEFAULT_EPOCHS,
+        .batch_size = CNN_DEFAULT_BATCH_SIZE,
+        .learning_rate = 0.0f,  // Not used anymore - LRs are set in training_pipeline.c
+        .l2_decay = CNN_DEFAULT_L2_DECAY,
+        .momentum = CNN_DEFAULT_MOMENTUM,
+        .patience = CNN_PATIENCE,
+        .data_path = "out/data/active.dat",
         .model_path = NULL, // Will determine
         .num_threads = get_max_threads(),
         .on_init = tr_on_init,
@@ -134,14 +149,19 @@ int cmd_train(int argc, char **argv) {
     int selfplay_only = 0;
     int train_only = 0;
     int fresh_init = 0;
-    const char *weights_in = "out/models/cnn_weights_v3.bin";
-    const char *weights_out = "out/models/cnn_weights_v3.bin";
+    const char *weights_in = "out/models/cnn_weights.bin";
+    const char *weights_out = "out/models/cnn_weights.bin";
+    
+    // Override parameters (0 = use defaults)
+    int nodes_override = 0;
+    int threads_override = 0;
     
     // Parse Args
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--selfplay") == 0) selfplay_only = 1;
         else if (strcmp(argv[i], "--train") == 0) train_only = 1;
         else if (strcmp(argv[i], "--games") == 0 && i+1 < argc) sp_cfg.games = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--temp") == 0 && i+1 < argc) sp_cfg.temp = atof(argv[++i]);
         else if (strcmp(argv[i], "--epochs") == 0 && i+1 < argc) tr_cfg.epochs = atoi(argv[++i]);
         else if (strcmp(argv[i], "--lr") == 0 && i+1 < argc) tr_cfg.learning_rate = atof(argv[++i]);
         else if (strcmp(argv[i], "--batch") == 0 && i+1 < argc) tr_cfg.batch_size = atoi(argv[++i]);
@@ -155,6 +175,9 @@ int cmd_train(int argc, char **argv) {
             weights_in = argv[++i];
             weights_out = argv[i];
         }
+        else if (strcmp(argv[i], "--nodes") == 0 && i+1 < argc) nodes_override = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--threads") == 0 && i+1 < argc) threads_override = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--endgame-prob") == 0 && i+1 < argc) sp_cfg.endgame_prob = atof(argv[++i]);
         else if (strcmp(argv[i], "--overwrite") == 0) sp_cfg.overwrite_data = 1;
         else if (strcmp(argv[i], "--init") == 0) fresh_init = 1;
         else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -185,14 +208,37 @@ int cmd_train(int argc, char **argv) {
     mcts_cfg.cnn_weights = &weights;
     mcts_cfg.max_nodes = 800; // Default Selfplay nodes
     
+    // Apply command-line overrides
+    if (nodes_override > 0) {
+        mcts_cfg.max_nodes = nodes_override;
+    }
+    if (threads_override > 0) {
+        sp_cfg.parallel_threads = threads_override;
+        tr_cfg.num_threads = threads_override;
+    }
+    
     // 1. Selfplay
     if (!train_only) {
+        // Prepare Date String
+        time_t now = time(NULL);
+        char date_str[64];
+        strftime(date_str, sizeof(date_str), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
         // UI Header
         SelfplayView sp_view = {
             .output_file = sp_cfg.output_file,
             .num_games = sp_cfg.games,
             .omp_threads = sp_cfg.parallel_threads,
-            .mcts_nodes = mcts_cfg.max_nodes
+            .mcts_nodes = mcts_cfg.max_nodes,
+            .date_str = date_str,
+            // Dirichlet
+            .dirichlet_alpha = 0.3f, // Dama/Checkers value (0.3 is standard for Chess, Dama similiar branching?)
+            .dirichlet_epsilon = 0.25f,
+            // Temp
+            .temperature = sp_cfg.temp,
+            .temp_threshold = 30, // Default in selfplay.c usually
+            .max_moves = sp_cfg.max_moves,
+            .endgame_prob = sp_cfg.endgame_prob
         };
         cli_view_print_selfplay(&sp_view); // Print header
         
@@ -203,13 +249,26 @@ int cmd_train(int argc, char **argv) {
     
     // 2. Training
     if (!selfplay_only) {
+        // Compute total parameters: conv layers + BN + FC heads
+        // Conv1: 64*12*9=6912, Conv2-4: 64*64*9=36864 each, BN: 64*8, Policy: 512*4097, Value: 256*4097+256+1
+        int total_params = 6912 + 3*36864 + 64*8 + 512*4097 + 256*4097 + 256 + 1;
+        
         TrainingConfigView tr_view = {
             .epochs = tr_cfg.epochs,
             .batch_size = tr_cfg.batch_size,
-            .learning_rate = tr_cfg.learning_rate,
-            .total_params = 0
+            // Calculate effective base LR to show reality
+            .learning_rate = (tr_cfg.learning_rate > 1e-6f) ? tr_cfg.learning_rate : CNN_POLICY_LR,
+            .l2_decay = tr_cfg.l2_decay,
+            .patience = tr_cfg.patience,
+            .omp_threads = tr_cfg.num_threads,
+            .total_params = total_params
         };
         cli_view_print_training_config(&tr_view);
+        
+        // Initialize tracking for completion message
+        training_start_time = time(NULL);
+        training_model_path = tr_cfg.model_path;
+        training_total_samples = dataset_get_count(tr_cfg.data_path) * tr_cfg.epochs;
         
         training_run(&weights, &tr_cfg);
     }

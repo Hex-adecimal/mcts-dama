@@ -3,9 +3,11 @@ trigger: model_decision
 description: When optimizing code or discussing performance bottlenecks
 ---
 
-Prima di ottimizzare, profilare sempre il codice:
+# Optimization Performance
 
-1. Usa `time` o strumenti come `perf`/`Instruments` per identificare le funzioni lente
-2. Concentrati sulle hot-path: loop interni di MCTS, generazione mosse, valutazione NN
-3. Misura PRIMA e DOPO ogni ottimizzazione con benchmark riproducibili
-4. Preferisci ottimizzazioni algoritmiche (O(n²) → O(n)) rispetto a micro-ottimizzazioni
+Always profile before optimizing:
+
+1. Use `time` or tools like `perf`/`Instruments` to identify slow functions
+2. Focus on hot-paths: MCTS inner loops, move generation, NN evaluation
+3. Measure BEFORE and AFTER with reproducible benchmarks
+4. Prefer algorithmic optimizations (O(n²) → O(n)) over micro-optimizations

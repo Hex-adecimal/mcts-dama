@@ -162,6 +162,22 @@ void cnn_encode_sample(const TrainingSample *sample, float *tensor, float *playe
 void cnn_forward_sample(const CNNWeights *w, const TrainingSample *sample, CNNOutput *out);
 
 /**
+ * Batch forward pass for multiple states (optimized with BLAS sgemm).
+ * @param w          Network weights
+ * @param states     Array of game state pointers (batch_size)
+ * @param hist1s     Array of history-1 state pointers (can be NULL)
+ * @param hist2s     Array of history-2 state pointers (can be NULL)
+ * @param outs       Output array (batch_size)
+ * @param batch_size Number of samples in batch
+ */
+void cnn_forward_batch(const CNNWeights *w, 
+                       const GameState **states,
+                       const GameState **hist1s,
+                       const GameState **hist2s,
+                       CNNOutput *outs, 
+                       int batch_size);
+
+/**
  * Zero all gradients before accumulating batch.
  */
 void cnn_zero_gradients(CNNWeights *w);
@@ -180,20 +196,21 @@ void cnn_backward(
 // NOTE: cnn_backward_sample was removed - logic is inlined in cnn_train_step
 
 /**
- * Update weights using SGD with momentum and Elastic Net regularization (L1 + L2).
+ * Update weights using SGD with momentum. Uses separate LRs for policy/value heads.
  */
 void cnn_clip_gradients(CNNWeights *w, float threshold);
-void cnn_update_weights(CNNWeights *w, float learning_rate, float momentum, float l1_decay, float l2_decay, int batch_size);
+void cnn_update_weights(CNNWeights *w, float policy_lr, float value_lr, float momentum, float l1_decay, float l2_decay, int batch_size);
 
 /**
  * Train on a batch of samples. Returns average loss.
- * Writes separate policy and value loss to out pointers if not NULL.
+ * Uses separate LRs for policy head (typically higher) and value head.
  */
 float cnn_train_step(
     CNNWeights *w,
     const TrainingSample *batch,
     int batch_size,
-    float learning_rate,
+    float policy_lr,
+    float value_lr,
     float l1_decay,
     float l2_decay,
     float *out_policy_loss,
@@ -216,12 +233,17 @@ void cnn_save_weights(const CNNWeights *w, const char *path);
  */
 int cnn_load_weights(CNNWeights *w, const char *path);
 
-/**
- * Convert move to policy index (canonical: always relative to player).
- * @param move The move to convert.
- * @param color The color of the player moving (WHITE/BLACK).
- */
+// Convert move to policy index (canonical: always relative to player).
+// @param move The move to convert.
+// @param color The color of the player moving (WHITE/BLACK).
 int cnn_move_to_index(const Move *move, int color);
+
+// Flip a square index vertically (row 0 <-> row 7, etc.)
+static inline int flip_square(int sq) {
+    int row = sq / 8;
+    int col = sq % 8;
+    return (7 - row) * 8 + col;
+}
 
 // NEW: Inference with explicit history
 void cnn_forward_with_history(const CNNWeights *w, const GameState *state, 

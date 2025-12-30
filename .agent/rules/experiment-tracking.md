@@ -3,11 +3,13 @@ trigger: model_decision
 description: When running experiments, tuning hyperparameters, or comparing configurations
 ---
 
-Documenta ogni esperimento:
+# Experiment Tracking
 
-1. **Config**: salva tutti gli iperparametri (iterations, C_puct, learning rate, etc.)
-2. **Risultati**: win rate, ELO relativo, games giocati
-3. **Riproducibilità**: usa seed fissi, salva versione del codice (git hash)
-4. **Confronti**: esegui sempre round-robin tournament tra configurazioni
-5. **Naming**: usa nomi descrittivi per config (es: `mcts_vanilla_1k`, `cnn_v3_lr001`)
-6. **Trend**: traccia le metriche nel tempo per identificare regressioni
+Document every experiment:
+
+1. **Config**: Save all hyperparams (iterations, C_puct, LR, etc.)
+2. **Results**: Win rate, relative ELO, games played
+3. **Reproducibility**: Use fixed seeds, save git hash
+4. **Comparisons**: Always run round-robin tournaments
+5. **Naming**: Use descriptive names (`mcts_vanilla_1k`, `cnn_v3_lr001`)
+6. **Trends**: Track metrics over time to catch regressions

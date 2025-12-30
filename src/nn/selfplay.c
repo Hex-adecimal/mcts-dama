@@ -7,6 +7,7 @@
 #include "movegen.h"
 #include "cnn.h"
 #include "dataset.h"
+#include "endgame.h"  // Include endgame generator
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,35 +83,54 @@ static int play_game(
     EndReason *out_reason, 
     float initial_temp, 
     RNG *rng,
-    const MercyConfig *mercy
+    const MercyConfig *mercy,
+    float endgame_prob
 ) {
     GameState state;
-    init_game(&state);
     
-    Arena arena;
-    arena_init(&arena, 50 * 1024 * 1024); // 50MB per game
-    
-    // 2 random opening moves
-    for (int i = 0; i < 2; i++) {
-        MoveList list;
-        generate_moves(&state, &list);
-        if (list.count > 0) {
-            int idx = rng_u32(rng) % list.count;
-            apply_move(&state, &list.moves[idx]);
+    // Endgame Initialization (Configurable Probability)
+    if (rng_f32(rng) < endgame_prob) {
+        setup_random_endgame(&state, rng);
+    } else {
+        init_game(&state);
+        
+        // 2 random opening moves (only for normal games)
+        for (int i = 0; i < 2; i++) {
+            MoveList list;
+            generate_moves(&state, &list);
+            if (list.count > 0) {
+                int idx = rng_u32(rng) % list.count;
+                apply_move(&state, &list.moves[idx]);
+            }
         }
     }
     
+    Arena arena;
+    arena_init(&arena, ARENA_SIZE_SELFPLAY); // Use central constant
+    Node *root = NULL; // Persistent root for tree reuse
+
     int moves = 0;
-    int max_moves = 200; // Hardcoded or config?
+    int max_moves = 200;
     float policy[CNN_POLICY_SIZE];
     
     while (!game_over(&state) && moves < max_moves) {
         float temp = (moves < DEFAULT_TEMP_THRESHOLD) ? initial_temp : 0.1f;
         
         MCTSConfig cfg = (state.current_player == WHITE) ? cfg_white : cfg_black;
-        Node *root = mcts_create_root(state, &arena, cfg);
         
-        // Noise
+        // Tree Reuse: Only create root if we don't have one (start of game or lost track)
+        if (!DEFAULT_TREE_REUSE || !root) {
+             if (!DEFAULT_TREE_REUSE) arena_reset(&arena);
+             root = mcts_create_root(state, &arena, cfg);
+        } else {
+             // Verify root state matches current state (paranoia check)
+             if (root->state.hash != state.hash) {
+                 // printf("Tree Reuse Mismatch! Recreating root.\n");
+                 root = mcts_create_root(state, &arena, cfg);
+             }
+        }
+        
+        // Add Dirichlet noise for exploration (first 30 moves)
         if (moves < 30) {
             add_dirichlet_noise(root, rng, DEFAULT_DIRICHLET_EPSILON, DEFAULT_DIRICHLET_ALPHA);
         }
@@ -118,21 +138,15 @@ static int play_game(
         mcts_search(root, &arena, 0.0, cfg, NULL, NULL); // Time 0.0 -> use max_nodes or implicit
         mcts_get_policy(root, policy, temp, &state);
         
-        // Select move
+        // Select move based on temperature
         Move chosen = {0};
-        // Reuse selection logic...
-        // For brevity, simple probabilistic selection:
         double r_val = rng_f32(rng);
         double cumsum = 0;
         int best_child = 0;
         double max_visit = -1;
         
-        // Recover children visits from policy? No, reuse children directly if possible.
-        // But mcts_get_policy returns policy array.
-        // Let's use root children.
-        
         if (temp < 0.1f) {
-            // Argmax visits
+            // Low temp: select most visited child (greedy)
             for (int i=0; i<root->num_children; i++) {
                 if (root->children[i]->visits > max_visit) {
                     max_visit = root->children[i]->visits;
@@ -141,10 +155,7 @@ static int play_game(
             }
             chosen = root->children[best_child]->move_from_parent;
         } else {
-            // Weighted random
-             // Note: mcts_get_policy already applied temp to policy array
-             // But mapping back to move is tricky without index.
-             // Better to select from children based on visits^1/temp
+            // High temp: sample proportionally to visit counts
              double sum = 0;
              double exp_t = 1.0/temp;
              for(int i=0; i<root->num_children; i++) sum += pow(root->children[i]->visits, exp_t);
@@ -158,7 +169,7 @@ static int play_game(
                      break;
                  }
              }
-             if (chosen.path[0] == 0) chosen = root->children[0]->move_from_parent; // Fallback
+             if (chosen.path[0] == 0) chosen = root->children[0]->move_from_parent;
         }
         
         // Record
@@ -169,7 +180,23 @@ static int play_game(
         if (moves >= 2) history_buffer[moves].history[1] = history_buffer[moves-2].state;
         
         apply_move(&state, &chosen);
-        arena_reset(&arena);
+        
+        // Tree Reuse: Advance root to the chosen child
+        if (DEFAULT_TREE_REUSE && root) {
+            Node *next_root = find_child_by_move(root, &chosen);
+            if (next_root) {
+                // Found! Reuse this subtree
+                root = next_root;
+                root->parent = NULL; // Detach from parent to be safe (though logically fine)
+            } else {
+                root = NULL; // Will recreate next iter
+            }
+        } else {
+             root = NULL;
+             // Reset handled at start of next loop via (!DEFAULT_TREE_REUSE) check
+        }
+        
+        // arena_reset(&arena); // REMOVED FOR PERSISTENCE. Arena accumulates for whole game (~40k nodes).
         moves++;
         
         // Checks
@@ -222,7 +249,7 @@ void selfplay_run(const SelfplayConfig *sp_cfg, const MCTSConfig *mcts_cfg) {
     
     int completed_games = 0;
     int total_wins = 0, total_losses = 0, total_draws = 0;
-    unsigned long long start_time = time(NULL); // ms precision needed? use clock()
+    unsigned long long start_time = time(NULL);
     
     int num_threads = (sp_cfg->parallel_threads > 0) ? sp_cfg->parallel_threads : 1;
     
@@ -244,11 +271,21 @@ void selfplay_run(const SelfplayConfig *sp_cfg, const MCTSConfig *mcts_cfg) {
             int steps = 0;
             EndReason reason;
             
-            // Opponent config: copy of mcts_cfg
+            // Mixed Opponent: Probabilistically replace one side with Grandmaster
             MCTSConfig w_cfg = *mcts_cfg;
             MCTSConfig b_cfg = *mcts_cfg;
             
-            int res = play_game(i, weights, w_cfg, b_cfg, history, &steps, &reason, sp_cfg->temp, &rng, &sp_cfg->mercy);
+            if (rng_f32(&rng) < MIX_OPPONENT_PROB) {
+                if (rng_u32(&rng) % 2 == 0) {
+                    w_cfg = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
+                    w_cfg.max_nodes = mcts_cfg->max_nodes; // Match complexity
+                } else {
+                    b_cfg = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
+                    b_cfg.max_nodes = mcts_cfg->max_nodes;
+                }
+            }
+            
+            int res = play_game(i, weights, w_cfg, b_cfg, history, &steps, &reason, sp_cfg->temp, &rng, &sp_cfg->mercy, sp_cfg->endgame_prob);
             
             // Stats update (atomic)
             #pragma omp atomic
@@ -292,7 +329,7 @@ void selfplay_run(const SelfplayConfig *sp_cfg, const MCTSConfig *mcts_cfg) {
                 if (sp_cfg->on_game_complete) {
                     sp_cfg->on_game_complete(i, sp_cfg->games, res, steps, reason);
                 }
-                if (sp_cfg->on_progress && (completed_games % 10 == 0 || completed_games == sp_cfg->games)) {
+                if (sp_cfg->on_progress) {
                     sp_cfg->on_progress(completed_games, sp_cfg->games, total_wins, total_losses, total_draws);
                 }
             }

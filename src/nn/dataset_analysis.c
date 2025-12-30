@@ -54,7 +54,7 @@ int dataset_analyze(const char *path, DatasetStats *stats) {
     
     // Duplicate checking prep
     uint64_t *hashes = NULL;
-    int check_duplicates = (count <= 200000);
+    int check_duplicates = (count <= 5000000); // Increased limit (safe for modern RAM)
     if (check_duplicates) {
         hashes = malloc(count * sizeof(uint64_t));
         if (!hashes) check_duplicates = 0;

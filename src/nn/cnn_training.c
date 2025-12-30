@@ -238,37 +238,48 @@ static void update_layer(float *w, float *d_w, float *v_w, size_t size, float lr
     }
 }
 
-void cnn_update_weights(CNNWeights *w, float lr, float momentum, float l1, float l2, int batch_size) {
-    float scaled_lr = lr / batch_size;
-    update_layer(w->conv1_w, w->d_conv1_w, w->v_conv1_w, 64*CNN_INPUT_CHANNELS*9, scaled_lr, momentum, l1, l2);
-    update_layer(w->conv1_b, w->d_conv1_b, w->v_conv1_b, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->conv2_w, w->d_conv2_w, w->v_conv2_w, 64*64*9, scaled_lr, momentum, l1, l2);
-    update_layer(w->conv2_b, w->d_conv2_b, w->v_conv2_b, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->conv3_w, w->d_conv3_w, w->v_conv3_w, 64*64*9, scaled_lr, momentum, l1, l2);
-    update_layer(w->conv3_b, w->d_conv3_b, w->v_conv3_b, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->conv4_w, w->d_conv4_w, w->v_conv4_w, 64*64*9, scaled_lr, momentum, l1, l2);
-    update_layer(w->conv4_b, w->d_conv4_b, w->v_conv4_b, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn1_gamma, w->d_bn1_gamma, w->v_bn1_gamma, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn1_beta, w->d_bn1_beta, w->v_bn1_beta, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn2_gamma, w->d_bn2_gamma, w->v_bn2_gamma, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn2_beta, w->d_bn2_beta, w->v_bn2_beta, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn3_gamma, w->d_bn3_gamma, w->v_bn3_gamma, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn3_beta, w->d_bn3_beta, w->v_bn3_beta, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn4_gamma, w->d_bn4_gamma, w->v_bn4_gamma, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->bn4_beta, w->d_bn4_beta, w->v_bn4_beta, 64, scaled_lr, momentum, 0, 0);
-    update_layer(w->policy_w, w->d_policy_w, w->v_policy_w, 512*4097, scaled_lr, momentum, l1, l2);
-    update_layer(w->policy_b, w->d_policy_b, w->v_policy_b, 512, scaled_lr, momentum, 0, 0);
-    update_layer(w->value_w1, w->d_value_w1, w->v_value_w1, 256*4097, scaled_lr, momentum, l1, l2);
-    update_layer(w->value_b1, w->d_value_b1, w->v_value_b1, 256, scaled_lr, momentum, 0, 0);
-    update_layer(w->value_w2, w->d_value_w2, w->v_value_w2, 256, scaled_lr, momentum, l1, l2);
-    update_layer(w->value_b2, w->d_value_b2, w->v_value_b2, 1, scaled_lr, momentum, 0, 0);
+
+void cnn_update_weights(CNNWeights *w, float policy_lr, float value_lr, float momentum, float l1, float l2, int batch_size) {
+    float scaled_policy_lr = policy_lr / batch_size;
+    float scaled_value_lr = value_lr / batch_size;
+    
+    // Shared backbone uses geometric mean of both LRs for balanced learning
+    float scaled_backbone_lr = sqrtf(scaled_policy_lr * scaled_value_lr);
+    
+    // Backbone (conv layers, BN) - shared between both heads
+    update_layer(w->conv1_w, w->d_conv1_w, w->v_conv1_w, 64*CNN_INPUT_CHANNELS*9, scaled_backbone_lr, momentum, l1, l2);
+    update_layer(w->conv1_b, w->d_conv1_b, w->v_conv1_b, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->conv2_w, w->d_conv2_w, w->v_conv2_w, 64*64*9, scaled_backbone_lr, momentum, l1, l2);
+    update_layer(w->conv2_b, w->d_conv2_b, w->v_conv2_b, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->conv3_w, w->d_conv3_w, w->v_conv3_w, 64*64*9, scaled_backbone_lr, momentum, l1, l2);
+    update_layer(w->conv3_b, w->d_conv3_b, w->v_conv3_b, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->conv4_w, w->d_conv4_w, w->v_conv4_w, 64*64*9, scaled_backbone_lr, momentum, l1, l2);
+    update_layer(w->conv4_b, w->d_conv4_b, w->v_conv4_b, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn1_gamma, w->d_bn1_gamma, w->v_bn1_gamma, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn1_beta, w->d_bn1_beta, w->v_bn1_beta, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn2_gamma, w->d_bn2_gamma, w->v_bn2_gamma, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn2_beta, w->d_bn2_beta, w->v_bn2_beta, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn3_gamma, w->d_bn3_gamma, w->v_bn3_gamma, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn3_beta, w->d_bn3_beta, w->v_bn3_beta, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn4_gamma, w->d_bn4_gamma, w->v_bn4_gamma, 64, scaled_backbone_lr, momentum, 0, 0);
+    update_layer(w->bn4_beta, w->d_bn4_beta, w->v_bn4_beta, 64, scaled_backbone_lr, momentum, 0, 0);
+    
+    // Policy head - uses policy_lr
+    update_layer(w->policy_w, w->d_policy_w, w->v_policy_w, 512*4097, scaled_policy_lr, momentum, l1, l2);
+    update_layer(w->policy_b, w->d_policy_b, w->v_policy_b, 512, scaled_policy_lr, momentum, 0, 0);
+    
+    // Value head - uses value_lr
+    update_layer(w->value_w1, w->d_value_w1, w->v_value_w1, 256*4097, scaled_value_lr, momentum, l1, l2);
+    update_layer(w->value_b1, w->d_value_b1, w->v_value_b1, 256, scaled_value_lr, momentum, 0, 0);
+    update_layer(w->value_w2, w->d_value_w2, w->v_value_w2, 256, scaled_value_lr, momentum, l1, l2);
+    update_layer(w->value_b2, w->d_value_b2, w->v_value_b2, 1, scaled_value_lr, momentum, 0, 0);
 }
 
 // =============================================================================
 // FULLY PARALLELIZED TRAINING STEP (Data Parallel)
 // =============================================================================
 
-float cnn_train_step(CNNWeights *w, const TrainingSample *batch, int batch_size, float lr, float l1, float l2, float *out_policy_loss, float *out_value_loss) {
+float cnn_train_step(CNNWeights *w, const TrainingSample *batch, int batch_size, float policy_lr, float value_lr, float l1, float l2, float *out_policy_loss, float *out_value_loss) {
     cnn_zero_gradients(w);
     
     float total_loss = 0, total_p_loss = 0, total_v_loss = 0;
@@ -383,7 +394,7 @@ float cnn_train_step(CNNWeights *w, const TrainingSample *batch, int batch_size,
     }
 
     cnn_clip_gradients(w, 5.0f);
-    cnn_update_weights(w, lr, 0.9f, l1, l2, batch_size);
+    cnn_update_weights(w, policy_lr, value_lr, 0.9f, l1, l2, batch_size);
 
     if (out_policy_loss) *out_policy_loss = total_p_loss / batch_size;
     if (out_value_loss) *out_value_loss = total_v_loss / batch_size;

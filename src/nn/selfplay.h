@@ -23,6 +23,7 @@ typedef struct {
     
     MercyConfig mercy;
     int overwrite_data;   // If 1, overwrites output file; else appends
+    float endgame_prob;   // Probability of starting from endgame (0.0-1.0)
     
     // Callbacks
     void (*on_start)(int total_games);

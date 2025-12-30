@@ -70,21 +70,27 @@ double simulate_rollout(Node *node, MCTSConfig config) {
     }
 
     GameState temp_state = node->state;
+    int original_player = node->player_who_just_moved;
     
     if (node->is_terminal) {
         int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;
-        return (winner == node->player_who_just_moved) ? WIN_SCORE : LOSS_SCORE;
+        return (winner == original_player) ? WIN_SCORE : LOSS_SCORE;
     }
 
     int depth = 0;
     MoveList temp_moves;
     
-    while (depth < MAX_ROLLOUT_DEPTH) {
+    // Use shorter depth for fast rollout
+    int max_depth = config.use_fast_rollout ? 
+                    (config.fast_rollout_depth > 0 ? config.fast_rollout_depth : 50) : 
+                    MAX_ROLLOUT_DEPTH;
+    
+    while (depth < max_depth) {
         generate_moves(&temp_state, &temp_moves);
 
         if (temp_moves.count == 0) {
             int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;
-            if (winner == node->player_who_just_moved) {
+            if (winner == original_player) {
                 double score = WIN_SCORE;
                 if (config.use_decaying_reward) score *= pow(config.decay_factor, depth);
                 return score;
@@ -107,6 +113,27 @@ double simulate_rollout(Node *node, MCTSConfig config) {
 
         apply_move(&temp_state, &chosen_move);
         depth++;
+        
+        // Fast rollout: early termination on material advantage
+        if (config.use_fast_rollout && depth % 5 == 0) {  // Check every 5 moves
+            int my_pieces = __builtin_popcountll(get_pieces(&temp_state, original_player));
+            int opp_pieces = __builtin_popcountll(get_pieces(&temp_state, 1 - original_player));
+            int diff = my_pieces - opp_pieces;
+            
+            if (diff >= 3) return 0.85;   // Strong material advantage
+            if (diff <= -3) return 0.15;  // Strong material disadvantage
+        }
     }
+    
+    // At max depth: return material-based evaluation instead of draw
+    if (config.use_fast_rollout) {
+        int my_pieces = __builtin_popcountll(get_pieces(&temp_state, original_player));
+        int opp_pieces = __builtin_popcountll(get_pieces(&temp_state, 1 - original_player));
+        double material_score = 0.5 + 0.05 * (my_pieces - opp_pieces);  // Range [0.1, 0.9]
+        if (material_score < 0.1) material_score = 0.1;
+        if (material_score > 0.9) material_score = 0.9;
+        return material_score;
+    }
+    
     return DRAW_SCORE;
 }

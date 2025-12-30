@@ -3,15 +3,25 @@ trigger: model_decision
 description: When you see there are comment not following this style
 ---
 
-Scrivi i commenti in modo pulito e in lingua inglese. Inoltre specifica se alcune parti del codice servono per Alcuni esempi di commenti sono:
+# Comment Style
 
+Write comments in **English**, clean and structured.
+
+## File Headers
+```c
 /**
-
-* movegen.c - Move Generation for Italian Checkers
-* Uses lookup tables for fast move/capture generation.
-* Implements Italian priority rules for mandatory captures.
+ * filename.c - Brief description
+ * Key implementation details
  */
+```
 
-// --- Lookup Tables ---
+## Sections
+```c
+// --- Section Name ---
+// === Major Section ===
+```
 
-// Jump targets
+## Rules
+- ❌ No trivial comments on obvious code
+- ✅ Explain WHY, not WHAT
+- ✅ Comment complex algorithms only

@@ -84,6 +84,7 @@ typedef struct {
     float temperature;
     float dirichlet_alpha;
     float dirichlet_epsilon;
+    float endgame_prob;
 } SelfplayView;
 
 typedef struct {
@@ -140,7 +141,7 @@ typedef struct {
     int id;
     char name[32];
     int nodes;
-    float puct;
+    float explore_c;  // Either ucb1_c or puct_c depending on mode
     char features[64];
 } TournamentPlayerInfo;
 

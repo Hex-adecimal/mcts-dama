@@ -22,7 +22,7 @@ BIN_DIR = bin
 # =============================================================================
 
 # Core module
-CORE_SRCS = src/core/game.c src/core/movegen.c
+CORE_SRCS = src/core/game.c src/core/movegen.c src/core/endgame.c
 
 # MCTS module (consolidated from 7 files to 3)
 MCTS_SRCS = src/mcts/mcts.c src/mcts/mcts_tree.c src/mcts/mcts_rollout.c src/mcts/tournament.c
@@ -63,7 +63,7 @@ SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null || echo "-I/opt/homeb
 SDL_LDFLAGS := $(shell pkg-config --libs sdl2 2>/dev/null || echo "-L/opt/homebrew/lib -L/usr/local/lib -lSDL2")
 
 gui: $(BIN_DIR) $(OBJ_DIR)
-	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $(BIN_DIR)/game_gui _apps/gui/dama_gui.c $(LIB_SRCS) $(LDFLAGS) $(SDL_LDFLAGS)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -o $(BIN_DIR)/game_gui apps/gui/dama_gui.c $(LIB_SRCS) $(LDFLAGS) $(SDL_LDFLAGS)
 
 # Tests
 tests: $(BIN_DIR)

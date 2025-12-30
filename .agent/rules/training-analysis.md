@@ -3,112 +3,73 @@ trigger: model_decision
 description: When analyzing training results, discussing model performance, or evaluating new experiments
 ---
 
-# Critical Training Analysis
+# Training Analysis
 
-## 🎯 Obiettivo
+Loss going down ≠ model learned. Question everything.
 
-Quando si discutono risultati di training, **mettere sempre in dubbio** le metriche prima di trarre conclusioni. Una loss che scende NON significa automaticamente che il modello ha imparato.
-
----
-
-## 🔍 Checklist di Analisi Critica
+## Critical Checklist
 
 ### 1. Dataset Quality
-Prima di guardare la loss, analizza i **dati di training**:
 
-| Domanda | Cosa cercare | Red Flag 🚩 |
-|---------|--------------|-------------|
-| Bilanciamento classi? | % vittorie W / % vittorie B / % pareggi | > 70% di una classe |
-| Distribuzione mosse? | Varietà di aperture e posizioni | Posizioni ripetitive |
-| Qualità partite? | Come sono state generate (random vs MCTS) | Partite troppo corte/lunghe |
-| Dimensione dataset? | Numero di samples | < 10k samples per training serio |
+| Question | Red Flag |
+|----------|----------|
+| Class balance? | >70% one class |
+| Move diversity? | Repetitive positions |
+| Game quality? | Too short (<20) or too long (>200) |
+| Dataset size? | <10k samples for serious training |
 
 ### 2. Loss Breakdown
-**MAI** guardare solo la loss totale. Analizza separatamente:
 
+**Always analyze separately:**
 ```
-Total Loss = α × Policy_Loss + β × Value_Loss
+Total = α×Policy_Loss + β×Value_Loss
 
-Chiedi sempre:
-- Policy loss sta scendendo? → Il modello impara a scegliere mosse?
-- Value loss sta scendendo? → Il modello impara a valutare posizioni?
-- Una scende e l'altra sale? → 🚩 Problema di bilanciamento α/β
+Ask:
+- Policy loss decreasing? → Learning moves?
+- Value loss decreasing? → Learning positions?
+- One ↓ other ↑? → 🚩 Balance issue α/β
 ```
 
-### 3. Validazione Reale (NON solo metriche)
-La vera domanda: **il modello gioca meglio?**
+### 3. Real Validation (Not Just Metrics)
 
-| Test | Come farlo | Cosa cercare |
-|------|------------|--------------|
-| **Tournament vs baseline** | 100+ partite vs MCTS vanilla | Win rate > 55% è significativo |
-| **Tournament vs versione precedente** | 100+ partite vs modello N-1 | Miglioramento costante |
-| **Ispezione manuale** | Guarda 5-10 partite | Mosse sensate? Blunder ovvi? |
-| **Posizioni test** | Posizioni note con mossa "giusta" | Il modello le trova? |
+| Test | How | What to Check |
+|------|-----|---------------|
+| **vs baseline** | 100+ games vs vanilla | Win rate >55% significant |
+| **vs previous** | 100+ games vs model N-1 | Consistent improvement |
+| **Manual inspection** | Watch 5-10 games | Sensible moves? Blunders? |
+| **Test positions** | Known positions | Finds right moves? |
 
----
+## Common Traps
 
-## ⚠️ Trappole Comuni
+- **"Loss dropped a lot!"** → On what data? Overfitting? Easy dataset?
+- **"90% policy accuracy!"** → How many legal moves? (2-3 moves → 90% not impressive)
+- **"Value precise!"** → Always predicts ~0? (Safe bet for balanced data)
+- **"Improved in tournament!"** → How many games? (<50 = high variance)
 
-### 🚩 "La loss è scesa tantissimo!"
-**Domande da fare:**
-- Su che dati? Training set? Validation set?
-- C'è overfitting? (loss training ↓ ma validation ↑)
-- Il dataset era troppo facile/ripetitivo?
-
-### 🚩 "Policy accuracy è al 90%!"
-**Domande da fare:**
-- Quante mosse legali in media? (se 2-3, 90% non è impressionante)
-- Accuracy su posizioni complesse vs semplici?
-- Il modello sta memorizzando o generalizzando?
-
-### 🚩 "Value prediction è precisa!"
-**Domande da fare:**
-- Distribution shift? (training su posizioni diverse da quelle di gioco)
-- Il modello predice sempre ~0? (safe bet per dati bilanciati)
-- Calibrazione: predizione 0.7 → vince 70% delle volte?
-
-### 🚩 "Il modello è migliorato nel tournament!"
-**Domande da fare:**
-- Quante partite? (< 50 → varianza troppo alta)
-- Contro chi? (battere random non significa nulla)
-- Tempo per mossa uguale? (più tempo = più iterazioni MCTS = vantaggio sleale)
-
----
-
-## 📊 Template per Discussione Risultati
-
-Quando presenti risultati di training, includi SEMPRE:
+## Report Template
 
 ```markdown
-## Training Run: [nome/data]
+## Training: [name/date]
 
-### Dataset
+**Dataset**:
 - Source: [selfplay/tournament/mixed]
-- Samples: [N]
-- Distribuzione: [W%/B%/D%]
-- Posizioni uniche: [N o stima]
+- Samples: N
+- Distribution: W%/B%/D%
 
-### Metriche Training
-- Policy Loss: [inizio] → [fine]
-- Value Loss: [inizio] → [fine]  
-- Epochs: [N]
-- Learning Rate: [valore]
+**Metrics**:
+- Policy Loss: [start] → [end]
+- Value Loss: [start] → [end]
+- Epochs: N, LR: X
 
-### Validazione
-- Tournament vs [baseline]: [W-L-D] ([win rate]%)
-- Partite analizzate manualmente: [osservazioni]
+**Validation**:
+- Tournament vs [baseline]: W-L-D (X%)
+- Manual observations: [notes]
 
-### ⚠️ Dubbi / Limitazioni
-- [Lista di possibili problemi o bias]
+**Doubts/Limitations**: [list concerns]
 
-### Conclusione
-- [Solo dopo aver risposto ai dubbi]
+**Conclusion**: [only after addressing doubts]
 ```
 
----
+> "A model is guilty of not learning until proven innocent."
 
-## 🧠 Mindset
-
-> "Un modello è colpevole di non aver imparato finché non si dimostra innocente."
-
-Non celebrare mai una loss che scende. Celebra solo win rate che sale in tournament reali.
+Never celebrate loss decrease. Celebrate win rate increase.

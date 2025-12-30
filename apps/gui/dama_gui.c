@@ -360,13 +360,16 @@ int main(void) {
 
     // 3. Config Neural Network (AlphaZero)
     cnn_init(&cnn_weights);
-    int loaded = cnn_load_weights(&cnn_weights, "out/models/cnn_weights_final.bin");
-    if (!loaded) loaded = cnn_load_weights(&cnn_weights, "out/models/cnn_weights.bin"); // Fallback
+    int loaded = cnn_load_weights(&cnn_weights, "out/models/cnn_weights_v3.bin"); // Champion
+    if (!loaded) loaded = cnn_load_weights(&cnn_weights, "out/models/run_3h_current.bin"); // Fallback to latest
+    if (!loaded) loaded = cnn_load_weights(&cnn_weights, "out/models/cnn_weights_final.bin");
     
     if (loaded) {
-        printf("✓ Loaded Neural Network weights.\n");
+        printf("✓ Loaded Neural Network weights (Champion/Current).\n");
+        // Upgrade GM to Hybrid (The Champion Config)
+        config_gm.cnn_weights = &cnn_weights;
     } else {
-        printf("⚠️ Failed to load NN weights. Using random initialization (dumb).\n");
+        printf("⚠️ Failed to load NN weights. Hybrid mode disabled.\n");
     }
 
     config_cnn = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO);
@@ -386,7 +389,7 @@ int main(void) {
     while (difficulty < 1 || difficulty > 3) {
         printf("\n=== SELEZIONA DIFFICOLTA' ===\n");
         printf("1. Semplice (Vanilla MCTS)\n");
-        printf("2. Difficile (Grandmaster)\n");
+        printf("2. Difficile (Grandmaster Hybrid - Champion) 🏆\n");
         printf("3. Neural Network (AlphaZero) 🧠\n");
         printf("Scelta (1-3): ");
         if (scanf("%d", &difficulty) != 1) {
@@ -401,9 +404,9 @@ int main(void) {
         active_config = config_vanilla;
         printf("\nModalitá: SEMPLICE (Vanilla)\n");
     } else if (difficulty == 2) {
-        snprintf(title, sizeof(title), "MCTS Dama - vs Grandmaster Bot (Hard)");
+        snprintf(title, sizeof(title), "MCTS Dama - vs Grandmaster Hybrid (Champion)");
         active_config = config_gm;
-        printf("\nModalitá: DIFFICILE (Grandmaster)\n");
+        printf("\nModalitá: DIFFICILE (Grandmaster Hybrid)\n");
     } else {
         snprintf(title, sizeof(title), "MCTS Dama - vs AlphaZero (Neural Network)");
         active_config = config_cnn;

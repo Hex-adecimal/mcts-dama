@@ -20,6 +20,7 @@
 #include "cmd_data.c"
 #include "cmd_train.c"
 #include "cmd_tournament.c"
+#include "cmd_diagnose.c"
 
 // =============================================================================
 // COMMAND REGISTRY
@@ -35,6 +36,7 @@ static Command commands[] = {
     {"train",      "Train CNN (selfplay + SGD)",         cmd_train},
     {"tournament", "Run MCTS tournament",                cmd_tournament},
     {"data",       "Data utilities (inspect, merge)",    cmd_data},
+    {"diagnose",   "CNN training diagnostics",           cmd_diagnose},
     {NULL, NULL, NULL}
 };
 

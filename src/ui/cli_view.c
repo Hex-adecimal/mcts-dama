@@ -29,7 +29,14 @@ void cli_view_print_selfplay(const SelfplayView *view) {
                view->dirichlet_alpha, view->dirichlet_epsilon);
     log_printf("│  Temperature  : %.1f → 0.05 (after move %d)                         │\n", 
                view->temperature, view->temp_threshold);
-    log_printf("│  Openings     : 2 Random Moves                                     │\n");
+    char openings_buf[64];
+    if (view->endgame_prob > 0.0f) {
+        snprintf(openings_buf, sizeof(openings_buf), "Mixed (%.0f%% End, %.0f%% Rand)", 
+                 view->endgame_prob * 100.0f, (1.0f - view->endgame_prob) * 100.0f);
+    } else {
+        strcpy(openings_buf, "2 Random Moves");
+    }
+    log_printf("│  Openings     : %-50s │\n", openings_buf);
     log_printf("│  Opponent     : Self-Play (Current Model)                          │\n");
     log_printf("├────────────────────────────────────────────────────────────────────┤\n");
     log_printf("│  Adjudication : Mercy Rule (Intermediate)                          │\n");
@@ -165,12 +172,12 @@ void cli_view_print_dataset_stats(const DatasetStatsView *view) {
 void cli_view_print_tournament_roster(const TournamentRosterView *view) {
     log_printf("\n");
     log_printf("┌────┬──────────────────┬────────┬───────┬──────────────────────┐\n");
-    log_printf("│ ID │ Model Name       │ Nodes  │ PUCT  │ Features             │\n");
+    log_printf("│ ID │ Model Name       │ Nodes  │ Exp-C │ Features             │\n");
     log_printf("├────┼──────────────────┼────────┼───────┼──────────────────────┤\n");
     for (int i = 0; i < view->count; i++) {
         const TournamentPlayerInfo *p = &view->players[i];
         log_printf("│ %-2d │ %-16s │ %-6d │ %-5.2f │ %-20s │\n", 
-               p->id, p->name, p->nodes, p->puct, p->features);
+               p->id, p->name, p->nodes, p->explore_c, p->features);
     }
     log_printf("└────┴──────────────────┴────────┴───────┴──────────────────────┘\n");
     log_printf("\n");

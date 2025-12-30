@@ -44,24 +44,28 @@ static void on_game_complete(const TournamentGameResult *r) {
     
     double dur = r->duration;
 
-    printf("  > Game: %s vs %s -> %s (%d moves, %.2fs)\n", 
+    printf("  > Game: %-15s vs %-15s -> %s (%d moves, %.2fs)\n", 
            n1, n2, winner, r->moves, dur);
            
-    // P1 Stats
+    // P1 Stats (with restored KB and Depth)
     double d1 = r->duration_p1;
-    double nps1 = (d1 > 0.001) ? (double)r->s1.total_nodes / d1 : 0.0;
+    int moves1 = r->s1.total_moves > 0 ? r->s1.total_moves : 1;
+    double kb1 = (double)r->s1.total_memory / moves1 / 1024.0;
+    double depth1 = (double)r->s1.total_depth / moves1;
     double ips1 = (d1 > 0.001) ? (double)r->s1.total_iterations / d1 : 0.0;
-    printf("    [%s]: %s iters, %s nodes | %s ips, %s nps (%.2fs)\n",
+    printf("    [%-15s]: %s iters, %s nodes | %.1f KB, D%.1f | %s ips (%.2fs)\n",
            n1, format_num(r->s1.total_iterations), format_num(r->s1.total_nodes), 
-           format_metric(ips1), format_metric(nps1), d1);
+           kb1, depth1, format_metric(ips1), d1);
 
-    // P2 Stats
+    // P2 Stats (with restored KB and Depth)
     double d2 = r->duration_p2;
-    double nps2 = (d2 > 0.001) ? (double)r->s2.total_nodes / d2 : 0.0;
+    int moves2 = r->s2.total_moves > 0 ? r->s2.total_moves : 1;
+    double kb2 = (double)r->s2.total_memory / moves2 / 1024.0;
+    double depth2 = (double)r->s2.total_depth / moves2;
     double ips2 = (d2 > 0.001) ? (double)r->s2.total_iterations / d2 : 0.0;
-    printf("    [%s]: %s iters, %s nodes | %s ips, %s nps (%.2fs)\n",
+    printf("    [%-15s]: %s iters, %s nodes | %.1f KB, D%.1f | %s ips (%.2fs)\n",
            n2, format_num(r->s2.total_iterations), format_num(r->s2.total_nodes), 
-           format_metric(ips2), format_metric(nps2), d2);
+           kb2, depth2, format_metric(ips2), d2);
 }
 
 static void on_tournament_end(TournamentPlayer *players, int count) {
@@ -117,24 +121,26 @@ static void on_tournament_end(TournamentPlayer *players, int count) {
 // SETUP
 // =============================================================================
 
-static int setup_roster(TournamentPlayer *players, CNNWeights *v1, CNNWeights *v2, CNNWeights *v3, int nodes) {
+static int setup_roster(TournamentPlayer *players, CNNWeights *v3, CNNWeights *active, int nodes) {
     int n = 0;
     
-    // Presets
-    MCTSConfig pure = mcts_get_preset(MCTS_PRESET_PURE_VANILLA); pure.max_nodes = nodes;
-    MCTSConfig van = mcts_get_preset(MCTS_PRESET_VANILLA); van.max_nodes = nodes;
-    MCTSConfig gm = mcts_get_preset(MCTS_PRESET_GRANDMASTER); gm.max_nodes = nodes;
-    MCTSConfig cnn1 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); cnn1.max_nodes = nodes; cnn1.cnn_weights = v1;
-    MCTSConfig cnn2 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); cnn2.max_nodes = nodes; cnn2.cnn_weights = v2;
-    MCTSConfig cnn3 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); cnn3.max_nodes = nodes; cnn3.cnn_weights = v3;
+    // 1. CNN-V3 (Benchmark)
+    MCTSConfig cnn3 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
+    cnn3.max_nodes = nodes; 
+    cnn3.cnn_weights = v3;
+    players[n++] = (TournamentPlayer){.name="CNN-V3", .desc="Benchmark (Stable)", .config=cnn3, .elo=1200};
+
+    // 2. Grandmaster (Hybrid with V3)
+    MCTSConfig gm = mcts_get_preset(MCTS_PRESET_GRANDMASTER); 
+    gm.max_nodes = nodes;
+    gm.cnn_weights = v3; 
+    players[n++] = (TournamentPlayer){.name="Grandmaster-V3", .desc="Hybrid Heuristic", .config=gm, .elo=1200};
     
-    // Add players
-    players[n++] = (TournamentPlayer){.name="PureVanilla", .desc="Random Rollouts", .config=pure, .elo=1200};
-    players[n++] = (TournamentPlayer){.name="Vanilla", .desc="Std MCTS (Lookahead)", .config=van, .elo=1200};
-    players[n++] = (TournamentPlayer){.name="Grandmaster", .desc="Hand-Tuned Heuristic + PUCT", .config=gm, .elo=1200};
-    players[n++] = (TournamentPlayer){.name="CNN-V1", .desc="CNN (v1.bin)", .config=cnn1, .elo=1200};
-    players[n++] = (TournamentPlayer){.name="CNN-V2", .desc="CNN (v2.bin)", .config=cnn2, .elo=1200};
-    players[n++] = (TournamentPlayer){.name="CNN-New", .desc="CNN (v3.bin)", .config=cnn3, .elo=1200};
+    // 3. CNN-New (Active Model)
+    MCTSConfig cnn_new = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
+    cnn_new.max_nodes = nodes; 
+    cnn_new.cnn_weights = active;
+    players[n++] = (TournamentPlayer){.name="CNN-New", .desc="Active Training", .config=cnn_new, .elo=1200};
     
     return n;
 }
@@ -145,8 +151,8 @@ static int setup_roster(TournamentPlayer *players, CNNWeights *v1, CNNWeights *v
 
 int cmd_tournament(int argc, char **argv) {
     int games = 10; // per pairing
-    double time_limit = 1.0;
-    int nodes = 800;
+    double time_limit = 0.2;  // 200ms per move (time-based)
+    int nodes = 0;  // 0 = no node limit, use time only
     int use_parallel = 1;
 
     for (int i = 1; i < argc; i++) {
@@ -171,15 +177,16 @@ int cmd_tournament(int argc, char **argv) {
     srand(time(NULL));
     
     // Load Weights
-    CNNWeights w1, w2, w3;
-    cnn_init(&w1); cnn_init(&w2); cnn_init(&w3);
-    cnn_load_weights(&w1, "out/models/cnn_weights_v1.bin");
-    cnn_load_weights(&w2, "out/models/cnn_weights_v2.bin");
-    cnn_load_weights(&w3, "out/models/cnn_weights_v3.bin");
+    CNNWeights w3, w_active;
+    cnn_init(&w3); cnn_init(&w_active);
+    
+    // Load V3 and Active
+    if(cnn_load_weights(&w3, "out/models/cnn_weights_v3.bin") != 0) printf("Warning: V3 missing\n");
+    if(cnn_load_weights(&w_active, "out/models/cnn_weights.bin") != 0) printf("Warning: Active model missing\n");
     
     // Setup Players
     TournamentPlayer players[16];
-    int n = setup_roster(players, &w1, &w2, &w3, nodes);
+    int n = setup_roster(players, &w3, &w_active, nodes);
     
     // Run
     TournamentSystemConfig cfg = {
@@ -201,7 +208,8 @@ int cmd_tournament(int argc, char **argv) {
         infos[i].id = i+1;
         strncpy(infos[i].name, players[i].name, 31);
         infos[i].nodes = players[i].config.max_nodes;
-        infos[i].puct = players[i].config.use_puct ? players[i].config.puct_c : 0;
+        // Show whichever exploration constant is active (puct_c or ucb1_c)
+        infos[i].explore_c = players[i].config.use_puct ? players[i].config.puct_c : players[i].config.ucb1_c;
         strncpy(infos[i].features, players[i].desc, 63);
     }
     TournamentRosterView rv = { .count=n, .players=infos };
@@ -212,7 +220,7 @@ int cmd_tournament(int argc, char **argv) {
     g_players = NULL;
     
     // Cleanup
-    cnn_free(&w1); cnn_free(&w2); cnn_free(&w3);
+    cnn_free(&w3); cnn_free(&w_active);
     
     return 0;
 }

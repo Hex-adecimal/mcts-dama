@@ -5,6 +5,7 @@
 #include "training_pipeline.h"
 #include "dataset.h"
 #include "core/rng.h"
+#include "../params.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,12 +29,13 @@ static void shuffle_samples(TrainingSample *arr, int n, RNG *rng) {
     }
 }
 
-// Validation loop
-static void run_validation(CNNWeights *w, const TrainingSample *samples, int count, float *out_loss, float *out_acc) {
-    double total_loss = 0;
+// Validation loop - returns separate policy and value loss
+static void run_validation(CNNWeights *w, const TrainingSample *samples, int count, 
+                           float *out_p_loss, float *out_v_loss, float *out_acc) {
+    double total_p_loss = 0, total_v_loss = 0;
     int correct_moves = 0;
     
-    #pragma omp parallel for reduction(+:total_loss, correct_moves)
+    #pragma omp parallel for reduction(+:total_p_loss, total_v_loss, correct_moves)
     for (int i = 0; i < count; i++) {
         float policy[CNN_POLICY_SIZE];
         float value;
@@ -44,17 +46,16 @@ static void run_validation(CNNWeights *w, const TrainingSample *samples, int cou
                    &out);
         memcpy(policy, out.policy, sizeof(policy));
         value = out.value;
-                   
-        // Note: cnn_forward signature in cnn.h uses GameState*.
-        // Need to check specific signature if it accepts pointer or what.
         
-        // Loss
+        // Policy loss (cross-entropy)
         double p_loss = 0;
         for (int j = 0; j < CNN_POLICY_SIZE; j++) {
             p_loss -= samples[i].target_policy[j] * logf(policy[j] + 1e-10f);
         }
+        // Value loss (MSE)
         double v_loss = (value - samples[i].target_value) * (value - samples[i].target_value);
-        total_loss += (p_loss + v_loss);
+        total_p_loss += p_loss;
+        total_v_loss += v_loss;
         
         // Accuracy (top 1 move)
         int best_pred = 0;
@@ -63,9 +64,8 @@ static void run_validation(CNNWeights *w, const TrainingSample *samples, int cou
             if (policy[j] > max_p) { max_p = policy[j]; best_pred = j; }
         }
         
-        // Is best_pred in target? target is probability distribution.
+        // Check if prediction matches target
         if (samples[i].target_policy[best_pred] > 0.0f) {
-            // Check if it was the "best" in target too
             float max_t = -1;
             int best_t = 0;
             for(int j=0; j<CNN_POLICY_SIZE; j++) {
@@ -75,7 +75,8 @@ static void run_validation(CNNWeights *w, const TrainingSample *samples, int cou
         }
     }
     
-    *out_loss = (float)(total_loss / count);
+    *out_p_loss = (float)(total_p_loss / count);
+    *out_v_loss = (float)(total_v_loss / count);
     *out_acc = (float)correct_moves / count;
 }
 
@@ -113,8 +114,11 @@ void training_run(CNNWeights *weights, const TrainingPipelineConfig *cfg) {
     
     if (cfg->on_init) cfg->on_init(n_train, n_val);
     
-    // Setup
-    float lr = cfg->learning_rate;
+    // Setup - separate LRs for policy and value heads
+    // If cfg->learning_rate is set (>0), use it as base for Policy LR and scale Value LR
+    float base_lr = (cfg->learning_rate > 1e-6f) ? cfg->learning_rate : CNN_POLICY_LR;
+    float policy_lr = base_lr;
+    float value_lr = base_lr * (CNN_VALUE_LR / CNN_POLICY_LR); // Maintain ratio defined in params.h
     float best_val_loss = 1e9f;
     int patience_counter = 0;
     int best_epoch = -1;
@@ -127,14 +131,16 @@ void training_run(CNNWeights *weights, const TrainingPipelineConfig *cfg) {
 
     // Epochs
     for (int epoch = 1; epoch <= cfg->epochs; epoch++) {
-        if (cfg->on_epoch_start) cfg->on_epoch_start(epoch, cfg->epochs, lr);
+        // Use geometric mean for display (represents backbone LR)
+        float display_lr = sqrtf(policy_lr * value_lr);
+        if (cfg->on_epoch_start) cfg->on_epoch_start(epoch, cfg->epochs, display_lr);
         
         // Shuffle train data
         shuffle_samples(train_data, n_train, &rng);
         
         // Training Batches
         int num_batches = (n_train + cfg->batch_size - 1) / cfg->batch_size;
-        float epoch_loss = 0;
+        float epoch_p_loss = 0, epoch_v_loss = 0;
         
         for (int b = 0; b < num_batches; b++) {
             int start = b * cfg->batch_size;
@@ -142,27 +148,38 @@ void training_run(CNNWeights *weights, const TrainingPipelineConfig *cfg) {
             if (end > n_train) end = n_train;
             int size = end - start;
             
-            float p_loss, v_loss;
-            float batch_loss = cnn_train_step(weights, &train_data[start], size, lr, 0.0f, cfg->l2_decay, &p_loss, &v_loss);
+            // Linear LR Warmup for first epoch (applies to both LRs)
+            float effective_policy_lr = policy_lr;
+            float effective_value_lr = value_lr;
+            if (epoch <= CNN_LR_WARMUP_EPOCHS) {
+                float warmup_progress = (float)(b + 1) / (float)num_batches;
+                effective_policy_lr = policy_lr * warmup_progress;
+                effective_value_lr = value_lr * warmup_progress;
+            }
             
-            epoch_loss += batch_loss * size;
+            float p_loss, v_loss;
+            cnn_train_step(weights, &train_data[start], size, effective_policy_lr, effective_value_lr, 0.0f, cfg->l2_decay, &p_loss, &v_loss);
+            
+            epoch_p_loss += p_loss * size;
+            epoch_v_loss += v_loss * size;
             
             if (cfg->on_batch_log && b % 10 == 0) {
-                // Approximate samples processed
-                cfg->on_batch_log(b, num_batches, batch_loss, start + size);
+                cfg->on_batch_log(b, num_batches, p_loss, v_loss, start + size);
             }
         }
-        epoch_loss /= n_train;
+        epoch_p_loss /= n_train;
+        epoch_v_loss /= n_train;
         
         // Validation
-        float val_loss, val_acc;
-        run_validation(weights, val_data, n_val, &val_loss, &val_acc);
+        float val_p_loss, val_v_loss, val_acc;
+        run_validation(weights, val_data, n_val, &val_p_loss, &val_v_loss, &val_acc);
+        float total_val_loss = val_p_loss + val_v_loss;
         
-        // Improvement check
+        // Improvement check (based on total validation loss)
         int improved = 0;
         const char *saved_path = NULL;
-        if (val_loss < best_val_loss) {
-            best_val_loss = val_loss;
+        if (total_val_loss < best_val_loss) {
+            best_val_loss = total_val_loss;
             best_epoch = epoch;
             improved = 1;
             patience_counter = 0;
@@ -176,16 +193,17 @@ void training_run(CNNWeights *weights, const TrainingPipelineConfig *cfg) {
             }
         } else {
             patience_counter++;
-            // Decay LR if stuck
-            if (patience_counter > cfg->patience / 2) {
-                lr *= 0.8f; 
-                // Don't let LR go too low?
-                if (lr < 1e-6f) lr = 1e-6f;
+            // Decay both LRs if stuck (using params.h constants)
+            if (patience_counter >= CNN_LR_DECAY_PATIENCE) {
+                policy_lr *= CNN_LR_DECAY_FACTOR; 
+                value_lr *= CNN_LR_DECAY_FACTOR;
+                if (policy_lr < 1e-6f) policy_lr = 1e-6f;
+                if (value_lr < 1e-6f) value_lr = 1e-6f;
             }
         }
         
         if (cfg->on_epoch_end) 
-            cfg->on_epoch_end(epoch, epoch_loss, val_loss, val_acc, improved, saved_path);
+            cfg->on_epoch_end(epoch, epoch_p_loss, epoch_v_loss, val_p_loss, val_v_loss, val_acc, improved, saved_path);
             
         // Early stopping
         if (patience_counter >= cfg->patience) {

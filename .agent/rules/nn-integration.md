@@ -3,11 +3,11 @@ trigger: model_decision
 description: When working on neural network code or training pipeline
 ---
 
-Per l'integrazione NN stile AlphaZero:
+# NN Integration (AlphaZero-style)
 
-1. **Input encoding**: normalizza sempre i valori (0-1 o -1 a 1)
-2. **Policy head**: usa softmax su mosse legali, maschera le mosse illegali
-3. **Value head**: output singolo con tanh ∈ [-1, 1]
-4. **Batch inference**: accumula stati per batch prediction quando possibile
-5. **Training data**: bilancia vittorie/sconfitte/pareggi nel dataset
-6. **Loss function**: combina cross-entropy (policy) + MSE (value)
+1. **Input encoding**: Always normalize values (0-1 or -1 to 1)
+2. **Policy head**: Softmax on legal moves, mask illegal moves
+3. **Value head**: Single output with tanh ∈ [-1, 1]
+4. **Batch inference**: Accumulate states for batch prediction
+5. **Training data**: Balance wins/losses/draws in dataset
+6. **Loss function**: Combine cross-entropy (policy) + MSE (value)

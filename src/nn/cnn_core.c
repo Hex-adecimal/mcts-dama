@@ -239,12 +239,6 @@ void cnn_free(CNNWeights *w) {
 // STATE ENCODING (CANONICAL FORM)
 // =============================================================================
 
-// Flip a square index vertically (row 0 <-> row 7, etc.)
-static inline int flip_square(int sq) {
-    int row = sq / 8;
-    int col = sq % 8;
-    return (7 - row) * 8 + col;
-}
 
 // Encode state in CANONICAL FORM: board is always from current player's perspective
 // - Channel 0: "my" pawns

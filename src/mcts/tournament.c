@@ -75,8 +75,8 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
     init_game(&state);
     
     Arena arenaA, arenaB;
-    arena_init(&arenaA, 50*1024*1024);
-    arena_init(&arenaB, 50*1024*1024);
+    arena_init(&arenaA, ARENA_SIZE_TOURNAMENT);
+    arena_init(&arenaB, ARENA_SIZE_TOURNAMENT);
     
     GameState history[2] = {0};
     int moves = 0;

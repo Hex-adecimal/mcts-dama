@@ -71,7 +71,7 @@
 // =============================================================================
 
 #define ARENA_SIZE              ((size_t)8 * 1024 * 1024 * 1024)    // 8GB (game)
-#define ARENA_SIZE_TOURNAMENT   ((size_t)4 * 1024 * 1024 * 1024)    // 4GB (tournament)
+
 #define ARENA_SIZE_TUNER        ((size_t)256 * 1024 * 1024)         // 256MB (tuner)
 
 // =============================================================================
@@ -85,14 +85,22 @@
 #define W_EDGE                  0.90
 #define W_BASE                  1.53
 #define W_THREAT                9.74
-#define W_LADY_ACTIVITY         5.12
+#define W_LADY_ACTIVITY         12.0
 #define WEIGHT_DANGER           200         // Rollout danger penalty
 
 // =============================================================================
 // MCTS - THREADING
 // =============================================================================
 
-#define NUM_MCTS_THREADS        4           // Number of async MCTS worker threads
+// IMPORTANT: When using parallel self-play (--threads 10), each game spawns
+// NUM_MCTS_THREADS worker threads. With 10 games × 4 threads = 40 threads on
+// 10 cores, causing massive context switching overhead (~50% performance loss).
+// 
+// RECOMMENDATION: 
+//   - Use 1 thread for parallel self-play/tournament (optimal: 10 games × 1 = 10 threads)
+//   - Use 4 threads for single-game analysis (maximum search speed)
+//
+#define NUM_MCTS_THREADS        0           // Set to 0 for maximal throughput in parallel self-play (sequential search)
 #define MCTS_BATCH_SIZE         64          // Max batch size for Async MCTS inference
 
 // =============================================================================
@@ -100,5 +108,31 @@
 // =============================================================================
 
 #define LOG_RETENTION_COUNT     10          // Keep last N log files
+
+// Mixed Opponent Training
+#define MIX_OPPONENT_PROB       0.25        // 25% of games vs Grandmaster Heuristics
+
+// Memory Configurations
+#define ARENA_SIZE_SELFPLAY         ((size_t)512 * 1024 * 1024) // 512 MB for persistence
+#define ARENA_SIZE_TOURNAMENT       ((size_t)512 * 1024 * 1024)  // 512 MB (reset per move)
+#define ARENA_SIZE_BENCHMARK        ((size_t)64 * 1024 * 1024)
+// =============================================================================
+// TRAINING - NEURAL NETWORK
+// =============================================================================
+
+#define CNN_POLICY_LR           0.5f        // Policy head LR (high: 512-class softmax needs strong gradients)
+#define CNN_VALUE_LR            0.01f       // Value head LR (low: already learns well)
+#define CNN_DEFAULT_BATCH_SIZE  64          // Batch size
+#define CNN_DEFAULT_L2_DECAY    1e-4f       // L2 regularization
+#define CNN_DEFAULT_MOMENTUM    0.9f        // SGD momentum
+#define CNN_DEFAULT_EPOCHS      10          // Epochs per training run
+#define CNN_PATIENCE            5           // Early stopping patience
+
+// LR Schedule: Linear warmup for epoch 1, then decay on plateau
+#define CNN_LR_WARMUP_EPOCHS    1           // Linear warmup for first N epochs
+#define CNN_LR_DECAY_FACTOR     0.5f        // Multiply LR by this on plateau
+#define CNN_LR_DECAY_PATIENCE   2           // Epochs without improvement before decay
+
+#define TT_SIZE_DEFAULT             (1024 * 1024)
 
 #endif // PARAMS_H

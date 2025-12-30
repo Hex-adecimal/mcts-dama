@@ -3,11 +3,13 @@ trigger: model_decision
 description: When debugging issues or unexpected behavior
 ---
 
-Segui questo ordine per il debugging:
+# Debugging Strategy
 
-1. **Riproduci il bug**: crea un caso minimo riproducibile con seed fisso
-2. **Verifica le basi**: controlla prima movegen, poi valutazione, poi MCTS
-3. **Logging strutturato**: aggiungi log con livelli (DEBUG/INFO/WARN/ERROR)
-4. **Visualizza l'albero MCTS**: stampa la struttura per verificare l'esplorazione
-5. **Confronta con baseline**: verifica il comportamento vs MCTS vanilla
-6. **Usa assert**: aggiungi assert per invarianti (es: mosse valide)
+Follow this order:
+
+1. **Reproduce**: Create minimal case with fixed seed
+2. **Check basics**: Verify movegen → eval → MCTS
+3. **Structured logging**: Use DEBUG/INFO/WARN/ERROR levels
+4. **Visualize MCTS tree**: Print structure to verify exploration
+5. **Compare baseline**: Check behavior vs MCTS vanilla
+6. **Use asserts**: Add invariant checks (e.g., valid moves)

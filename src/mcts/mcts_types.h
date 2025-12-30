@@ -51,6 +51,10 @@ typedef struct {
     double fpu_value;
     int use_decaying_reward;
     double decay_factor;
+    
+    // Fast rollout: early termination on material advantage, shorter depth
+    int use_fast_rollout;
+    int fast_rollout_depth;  // Max depth when fast rollout enabled (default: 50)
 
     struct {
         double w_capture;
@@ -295,9 +299,6 @@ static inline MCTSConfig mcts_get_preset(MCTSPreset preset) {
             cfg.use_puct = 1;
             cfg.puct_c = PUCT_C;
             cfg.rollout_epsilon = ROLLOUT_EPSILON_NN;
-            //cfg.use_lookahead = DEFAULT_USE_LOOKAHEAD;
-            //cfg.use_tree_reuse = DEFAULT_TREE_REUSE;
-            //cfg.use_tt = DEFAULT_USE_TT;
             cfg.use_solver = DEFAULT_USE_SOLVER;
             break;
         case MCTS_PRESET_TT_ONLY:
