@@ -8,6 +8,8 @@
 
 #include "dama/engine/game.h"
 
+// --- Public API ---
+
 // Initialize lookup tables. Must call once before move generation.
 void init_move_tables(void);
 

@@ -152,10 +152,8 @@ TEST(training_dataset_split) {
     ASSERT_EQ(80, (int)train_count);
     ASSERT_EQ(20, (int)val_count);
     
-    // Note: dataset_split may or may not allocate new memory
-    // depending on implementation, so only free if different from samples
-    if (train != samples && train != NULL) free(train);
-    if (val != samples && val != NULL) free(val);
+    // Note: dataset_split returns pointers INTO the samples buffer, 
+    // not new allocations. So only free the original samples.
     free(samples);
 }
 

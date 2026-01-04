@@ -6,6 +6,7 @@
 
 #include "dama/engine/movegen.h"
 #include "dama/engine/game.h"
+#include "dama/common/debug.h"
 
 // --- Lookup Tables ---
 static Bitboard PAWN_MOVE_TARGETS[NUM_COLORS][NUM_SQUARES][2];
@@ -243,6 +244,8 @@ static void filter_moves(MoveList *list) {
 
 // --- Public API ---
 void generate_simple_moves(const GameState *s, MoveList *list) {
+    DBG_NOT_NULL(s);
+    DBG_NOT_NULL(list);
     const Color us = s->current_player;
     const Bitboard empty = get_empty_squares(s);
 
@@ -286,6 +289,8 @@ void generate_simple_moves(const GameState *s, MoveList *list) {
 }
 
 void generate_captures(const GameState *s, MoveList *list) {
+    DBG_NOT_NULL(s);
+    DBG_NOT_NULL(list);
     const Color us = s->current_player;
     const Color them = us ^ 1;
     
@@ -339,6 +344,8 @@ void generate_captures(const GameState *s, MoveList *list) {
 }
 
 void generate_moves(const GameState *s, MoveList *list) {
+    DBG_NOT_NULL(s);
+    DBG_NOT_NULL(list);
     list->count = 0;
     generate_captures(s, list);
     

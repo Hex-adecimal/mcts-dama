@@ -11,12 +11,9 @@
 #include "dama/engine/game.h"
 
 // =============================================================================
-// ARCHITECTURE CONSTANTS
+// ARCHITECTURE CONSTANTS (derived from params.h)
 // =============================================================================
 
-#define CNN_BOARD_SIZE      8
-#define CNN_HISTORY_T       3   // Number of timesteps (current + 2 previous)
-#define CNN_PIECE_CHANNELS  4   // white_pawns, white_ladies, black_pawns, black_ladies
 #define CNN_INPUT_CHANNELS  (CNN_HISTORY_T * CNN_PIECE_CHANNELS)  // 12 channels total
 #define CNN_CONV1_CHANNELS  64  // Wider first layer for better feature capture
 #define CNN_CONV2_CHANNELS  64
@@ -29,8 +26,6 @@
 // Batch Normalization constants
 #define CNN_BN_EPSILON     1e-5f   // Numerical stability
 #define CNN_BN_MOMENTUM    0.1f    // Running stats update rate
-#define CNN_POLICY_SIZE     512 // 64 squares × 8 channels (4 moves + 4 captures)
-#define CNN_VALUE_HIDDEN    256  // Larger value head for better position evaluation
 
 // =============================================================================
 // STRUCTURES

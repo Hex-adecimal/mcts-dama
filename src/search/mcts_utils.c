@@ -8,6 +8,7 @@
 #include "dama/search/mcts_tree.h"
 #include "dama/neural/cnn.h"
 #include "dama/common/params.h"
+#include "dama/common/logging.h"
 #include "dama/engine/movegen.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -150,7 +151,7 @@ void print_mcts_stats_sorted(Node *root) {
 
     Node **sorted_children = malloc(root->num_children * sizeof(Node*));
     if (!sorted_children) {
-        fprintf(stderr, "[mcts_utils] Warning: malloc failed in print_mcts_stats_sorted\n");
+        log_warn("[mcts_utils] malloc failed in print_mcts_stats_sorted");
         return;
     }
 

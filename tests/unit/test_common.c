@@ -184,3 +184,45 @@ TEST(common_popcount_works) {
     ASSERT_EQ(64, __builtin_popcountll(0xFFFFFFFFFFFFFFFFULL));
     ASSERT_EQ(8, __builtin_popcountll(0xFF));
 }
+
+// =============================================================================
+// ERROR CODES TESTS
+// =============================================================================
+
+TEST(common_error_codes_defined) {
+    // Verify error codes are properly defined
+    ASSERT_EQ(0, ERR_OK);
+    ASSERT_EQ(-1, ERR_NULL_PTR);
+    ASSERT_EQ(-2, ERR_MEMORY);
+    ASSERT_EQ(-3, ERR_FILE_OPEN);
+    ASSERT_EQ(-4, ERR_FILE_FORMAT);
+    ASSERT_EQ(-5, ERR_VERSION);
+    ASSERT_EQ(-6, ERR_INVALID_ARG);
+    ASSERT_EQ(-7, ERR_NOT_IMPL);
+}
+
+// =============================================================================
+// DEBUG ASSERT TESTS
+// =============================================================================
+
+TEST(common_debug_dbg_not_null_passes) {
+    // This should not log anything since pointer is valid
+    int value = 42;
+    int *ptr = &value;
+    DBG_NOT_NULL(ptr);
+    ASSERT_EQ(42, *ptr);
+}
+
+TEST(common_debug_dbg_valid_sq_passes) {
+    // Valid squares 0-63 should pass
+    DBG_VALID_SQ(0);
+    DBG_VALID_SQ(31);
+    DBG_VALID_SQ(63);
+}
+
+TEST(common_debug_dbg_valid_color_passes) {
+    // Valid colors 0 (WHITE) and 1 (BLACK) should pass
+    DBG_VALID_COLOR(0);
+    DBG_VALID_COLOR(1);
+}
+

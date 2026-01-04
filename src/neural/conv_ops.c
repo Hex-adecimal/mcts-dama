@@ -28,7 +28,10 @@ static __thread int tls_buffer_initialized = 0;
 static void ensure_buffer_initialized(void) {
     if (!tls_buffer_initialized) {
         tls_col_buffer = (float*)malloc(MAX_COL_BUFFER_SIZE * sizeof(float));
-        tls_buffer_initialized = 1;
+        if (tls_col_buffer) {
+            tls_buffer_initialized = 1;
+        }
+        // OOM: buffer stays NULL, operations will fail gracefully
     }
 }
 
@@ -124,6 +127,7 @@ void conv2d_forward(
     // Use thread-local pre-allocated buffer (zero allocation)
     ensure_buffer_initialized();
     float *col_buffer = tls_col_buffer;
+    if (!col_buffer) return;  // OOM - cannot proceed
     
     // 1. im2col (parallelized internally)
     im2col(input, Ci, H, W, K, pad, col_buffer);
@@ -164,6 +168,7 @@ void conv2d_backward(
     // Use thread-local pre-allocated buffer (zero allocation)
     ensure_buffer_initialized();
     float *col_buffer = tls_col_buffer;
+    if (!col_buffer) return;  // OOM - cannot proceed
     
     // 1. Bias Grad (parallelized with vDSP sum)
     #pragma omp parallel for

@@ -3,7 +3,8 @@
  */
 
 #include "dama/training/dataset.h"
-#include "dama/common/rng.h"  // FIX: Thread-safe RNG for shuffling
+#include "dama/common/rng.h"
+#include "dama/common/logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,7 @@
 int dataset_save(const char *filename, const TrainingSample *samples, size_t count) {
     FILE *f = fopen(filename, "wb");
     if (!f) {
-        fprintf(stderr, "[Dataset] Error: Cannot open %s for writing\n", filename);
+        log_error("[Dataset] Cannot open %s for writing", filename);
         return -1;
     }
     
@@ -34,7 +35,7 @@ int dataset_save(const char *filename, const TrainingSample *samples, size_t cou
     }
     
     fclose(f);
-    printf("[Dataset] Saved %zu samples to %s\n", count, filename);
+    log_info("[Dataset] Saved %zu samples to %s", count, filename);
     return 0;
 }
 
@@ -43,13 +44,13 @@ TrainingSample* dataset_load_alloc(const char *filename, int *out_count) {
     
     int count = dataset_get_count(filename);
     if (count <= 0) {
-        fprintf(stderr, "[Dataset] Error: Cannot get count from %s\n", filename);
+        log_error("[Dataset] Cannot get count from %s", filename);
         return NULL;
     }
     
     TrainingSample *data = malloc(count * sizeof(TrainingSample));
     if (!data) {
-        fprintf(stderr, "[Dataset] Error: Out of memory\n");
+        log_error("[Dataset] Out of memory");
         return NULL;
     }
     
@@ -145,7 +146,7 @@ int dataset_save_append(const char *filename, const TrainingSample *samples, siz
 int dataset_load(const char *filename, TrainingSample *samples, size_t max_samples) {
     FILE *f = fopen(filename, "rb");
     if (!f) {
-        fprintf(stderr, "[Dataset] Error: Cannot open %s for reading\n", filename);
+        log_error("[Dataset] Cannot open %s for reading", filename);
         return -1;
     }
     
@@ -158,15 +159,14 @@ int dataset_load(const char *filename, TrainingSample *samples, size_t max_sampl
     
     // Validate magic
     if (memcmp(header.magic, DATASET_MAGIC, 4) != 0) {
-        fprintf(stderr, "[Dataset] Error: Invalid file format\n");
+        log_error("[Dataset] Invalid file format");
         fclose(f);
         return -1;
     }
     
     // Validate version
     if (header.version != DATASET_VERSION) {
-        fprintf(stderr, "[Dataset] Error: Version mismatch (%u vs %u)\n", 
-                header.version, DATASET_VERSION);
+        log_error("[Dataset] Version mismatch (%u vs %u)", header.version, DATASET_VERSION);
         fclose(f);
         return -1;
     }
@@ -176,7 +176,7 @@ int dataset_load(const char *filename, TrainingSample *samples, size_t max_sampl
     size_t loaded = fread(samples, sizeof(TrainingSample), to_load, f);
     
     fclose(f);
-    printf("[Dataset] Loaded %zu samples from %s\n", loaded, filename);
+    log_info("[Dataset] Loaded %zu samples from %s", loaded, filename);
     return (int)loaded;
 }
 

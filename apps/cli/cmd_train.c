@@ -56,8 +56,10 @@ static void tr_on_epoch_start(int epoch, int total, float lr) {
     log_printf("----------------------------------------------------------------\n");
 }
 
+static int training_val_interval = 10;
+
 static void tr_on_batch(int b, int total, float p_loss, float v_loss, int samples) {
-    if (b % 10 == 0 || b == total - 1) {
+    if (b % training_val_interval == 0 || b == total - 1) {
         printf("\rBatch %d/%d | P:%.4f V:%.4f | Samples: %d", b, total, p_loss, v_loss, samples);
         fflush(stdout);
     }
@@ -177,6 +179,7 @@ int cmd_train(int argc, char **argv) {
         else if (strcmp(argv[i], "--nodes") == 0 && i+1 < argc) nodes_override = atoi(argv[++i]);
         else if (strcmp(argv[i], "--threads") == 0 && i+1 < argc) threads_override = atoi(argv[++i]);
         else if (strcmp(argv[i], "--endgame-prob") == 0 && i+1 < argc) sp_cfg.endgame_prob = atof(argv[++i]);
+        else if (strcmp(argv[i], "--val-interval") == 0 && i+1 < argc) training_val_interval = atoi(argv[++i]);
         else if (strcmp(argv[i], "--overwrite") == 0) sp_cfg.overwrite_data = 1;
         else if (strcmp(argv[i], "--init") == 0) fresh_init = 1;
         else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {

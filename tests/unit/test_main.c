@@ -29,6 +29,8 @@
 #include "dama/training/dataset.h"
 #include "dama/common/rng.h"
 #include "dama/common/params.h"
+#include "dama/common/error_codes.h"
+#include "dama/common/debug.h"
 
 // Include all test files
 #include "test_engine.c"
@@ -127,6 +129,10 @@ static void register_all_tests(void) {
     REGISTER_TEST(common_params_mcts_weights_defined);
     REGISTER_TEST(common_bit_operations_correct);
     REGISTER_TEST(common_popcount_works);
+    REGISTER_TEST(common_error_codes_defined);
+    REGISTER_TEST(common_debug_dbg_not_null_passes);
+    REGISTER_TEST(common_debug_dbg_valid_sq_passes);
+    REGISTER_TEST(common_debug_dbg_valid_color_passes);
 }
 
 // =============================================================================

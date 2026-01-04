@@ -8,9 +8,7 @@
 // =============================================================================
 // TRAINING SAMPLE
 // =============================================================================
-
-#define CNN_POLICY_SIZE 512  // Must match cnn.h
-#define CNN_HISTORY_T   3    // Must match cnn.h
+// Note: CNN_POLICY_SIZE and CNN_HISTORY_T are defined in params.h (via game.h)
 
 typedef struct {
     GameState state;                        // Current state (T=0)

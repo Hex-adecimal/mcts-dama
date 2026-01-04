@@ -5,6 +5,7 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include "dama/common/params.h"
 #include <stdint.h>
 
 // --- Type Definitions ---
@@ -20,7 +21,6 @@ typedef enum { DIR_NE = 0, DIR_NW = 1, DIR_SE = 2, DIR_SW = 3 } Direction;
 #define NUM_DIRECTIONS  4
 #define NUM_PAWN_DIRS   2
 #define MAX_MOVES       64
-#define MAX_MOVES_WITHOUT_CAPTURES 40
 #define MAX_CHAIN_LENGTH 12
 
 // Pawn capture direction ranges (for find_captures loop)

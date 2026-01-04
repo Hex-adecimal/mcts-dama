@@ -346,6 +346,56 @@ static int data_dedupe(const char *input, const char *output) {
 }
 
 // =============================================================================
+// TRIM - Keep only last N samples
+// =============================================================================
+
+static int data_trim(const char *file, int keeping) {
+    int count = dataset_get_count(file);
+    if (count <= keeping) {
+        printf("Dataset size (%d) <= limit (%d). No trim needed.\n", count, keeping);
+        return 0;
+    }
+
+    printf("Trimming dataset from %d to %d samples...\n", count, keeping);
+    
+    TrainingSample *samples = malloc(count * sizeof(TrainingSample));
+    if (!samples) {
+        printf("ERROR: Out of memory loading for trim.\n");
+        return 1;
+    }
+    
+    // Load ALL (inefficient but safe for now)
+    // Optimization: seek and load only last N if 'dataset_load' supports partial/seek
+    // Current API loads from start. 
+    dataset_load(file, samples, count);
+    
+    int start_idx = count - keeping;
+    if (start_idx < 0) start_idx = 0;
+    
+    // Save Overwrite
+    // We create a temp file then rename to be safe
+    char tmp_path[256];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", file);
+    
+    remove(tmp_path);
+    if (dataset_save(tmp_path, &samples[start_idx], keeping) != 0) {
+        printf("ERROR: Failed to save trim file.\n");
+        free(samples);
+        return 1;
+    }
+    
+    free(samples);
+    
+    if (rename(tmp_path, file) != 0) {
+        printf("ERROR: Failed to replace original file.\n");
+        return 1;
+    }
+    
+    printf("Trim complete.\n");
+    return 0;
+}
+
+// =============================================================================
 // CMD_DATA - Entry point
 // =============================================================================
 
@@ -427,6 +477,14 @@ int cmd_data(int argc, char **argv) {
             }
         }
         return data_dedupe(input, output);
+    }
+
+    if (strcmp(subcmd, "trim") == 0) {
+        if (argc < 4) {
+             printf("Usage: dama data trim <file.bin> <max_samples>\n");
+             return 1;
+        }
+        return data_trim(argv[2], atoi(argv[3]));
     }
     
     printf("Unknown subcommand: %s\n", subcmd);

@@ -2,6 +2,16 @@
 #define PARAMS_H
 
 // =============================================================================
+// NEURAL NETWORK ARCHITECTURE
+// =============================================================================
+
+#define CNN_BOARD_SIZE      8
+#define CNN_HISTORY_T       3       // Number of timesteps (current + 2 previous)
+#define CNN_PIECE_CHANNELS  4       // white_pawns, white_ladies, black_pawns, black_ladies
+#define CNN_POLICY_SIZE     512     // 64 squares × 8 channels (4 moves + 4 captures)
+#define CNN_VALUE_HIDDEN    256     // Value head hidden layer size
+
+// =============================================================================
 // GAME LIMITS
 // =============================================================================
 

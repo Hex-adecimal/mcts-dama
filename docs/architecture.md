@@ -78,10 +78,10 @@ AlphaZero-style training pipeline.
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `cnn_training.c` | 414 | Backprop, SGD with momentum, gradient clipping |
+| `cnn_training.c` | 414 | Backprop, SGD with momentum, gradient **& val-interval** |
 | `selfplay.c` | 366 | Self-play generation (Dirichlet, temperature) |
 | `training_pipeline.c` | 219 | Training loop with LR scheduling |
-| `dataset.c` | 220 | Binary dataset I/O |
+| `dataset.c` | 280 | Binary dataset I/O **+ Trim Logic** |
 | `dataset_analysis.c` | 153 | Dataset statistics and duplicate detection |
 
 ---

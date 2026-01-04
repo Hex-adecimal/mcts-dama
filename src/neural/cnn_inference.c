@@ -4,6 +4,7 @@
 
 #include "dama/neural/cnn.h"
 #include "dama/neural/conv_ops.h"
+#include "dama/common/debug.h"
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -19,6 +20,9 @@
 void cnn_forward_with_history(const CNNWeights *w, const GameState *state, 
                             const GameState *hist1, const GameState *hist2, 
                             CNNOutput *out) {
+    DBG_NOT_NULL(w);
+    DBG_NOT_NULL(state);
+    DBG_NOT_NULL(out);
     float player = 1.0f;  // Canonical form: always "my turn"
     float input[CNN_INPUT_CHANNELS * 64];
     memset(input, 0, sizeof(input));

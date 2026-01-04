@@ -3,6 +3,7 @@
  */
 
 #include "dama/engine/game.h"
+#include "dama/common/debug.h"
 #include <stdio.h>
 
 // --- Zobrist Hashing ---
@@ -46,6 +47,7 @@ static uint64_t compute_full_hash(const GameState *s) {
 
 // --- Game Initialization ---
 void init_game(GameState *state) {
+    DBG_NOT_NULL(state);
     state->piece[WHITE][PAWN] = INITIAL_WHITE_PAWNS;
     state->piece[BLACK][PAWN] = INITIAL_BLACK_PAWNS;
     state->piece[WHITE][LADY] = 0;
@@ -57,6 +59,8 @@ void init_game(GameState *state) {
 
 // --- Move Execution ---
 static void perform_movement(GameState *s, const int from, const int to) {
+    DBG_VALID_SQ(from);
+    DBG_VALID_SQ(to);
     const Color us = s->current_player;
     const Bitboard from_to_mask = BIT(from) | BIT(to);
     
@@ -70,6 +74,8 @@ static void perform_movement(GameState *s, const int from, const int to) {
 }
 
 void apply_move(GameState *state, const Move *move) {
+    DBG_NOT_NULL(state);
+    DBG_NOT_NULL(move);
     const Color us = state->current_player;
     const Color them = us ^ 1;
     const int from = move->path[0];

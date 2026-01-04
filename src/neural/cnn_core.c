@@ -9,6 +9,7 @@
 
 #include "dama/neural/cnn.h"
 #include "dama/common/rng.h"
+#include "dama/common/debug.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -114,6 +115,7 @@ void cnn_init(CNNWeights *w) {
 }
 
 void cnn_free(CNNWeights *w) {
+    DBG_NOT_NULL(w);
     // Convolutional layers
     free(w->conv1_w); free(w->conv1_b);
     free(w->conv2_w); free(w->conv2_b);

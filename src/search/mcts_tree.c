@@ -10,6 +10,7 @@
 #include "dama/engine/movegen.h"
 #include "dama/neural/cnn.h"
 #include "dama/common/params.h"
+#include "dama/common/debug.h"
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -63,6 +64,7 @@ double evaluate_move_heuristic(const GameState *state, const Move *move, MCTSCon
 // =============================================================================
 
 Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSConfig config) {
+    DBG_NOT_NULL(arena);
     Node *node = (Node*)arena_alloc(arena, sizeof(Node));
     if (!node) return NULL;
     
@@ -199,6 +201,8 @@ Node* find_child_by_move(Node *parent, const Move *move) {
 // =============================================================================
 
 Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config) {
+    DBG_NOT_NULL(node);
+    DBG_NOT_NULL(arena);
     if (node->untried_moves.count == 0) return node;
 
     int idx = node->untried_moves.count - 1;
@@ -272,6 +276,7 @@ void update_solver_status(Node *node) {
 }
 
 void backpropagate(Node *node, double result, int use_solver) {
+    DBG_NOT_NULL(node);
     Node *child = NULL;
     
     while (node != NULL) {

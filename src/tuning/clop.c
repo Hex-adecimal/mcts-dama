@@ -6,6 +6,7 @@
  */
 
 #include "clop.h"
+#include "dama/common/logging.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -14,7 +15,7 @@
 int clop_init(CLOPConfig *config, int num_params) {
     (void)config;
     (void)num_params;
-    fprintf(stderr, "CLOP not implemented yet\n");
+    log_error("[CLOP] Not implemented yet");
     return -1;
 }
 

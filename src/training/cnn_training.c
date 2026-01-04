@@ -4,6 +4,7 @@
 
 #include "dama/neural/cnn.h"
 #include "dama/neural/conv_ops.h"
+#include "dama/common/error_codes.h"
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -141,7 +142,20 @@ typedef struct {
     float *d_value_w2, *d_value_b2;
 } LocalGradients;
 
-static void local_grads_init(LocalGradients *lg) {
+// Forward declaration (needed by local_grads_init for OOM cleanup)
+static void local_grads_free(LocalGradients *lg);
+
+/**
+ * Initialize thread-local gradient buffers.
+ * 
+ * @return ERR_OK on success, ERR_MEMORY if any allocation fails.
+ *         On failure, all partially allocated memory is freed.
+ */
+static int local_grads_init(LocalGradients *lg) {
+    // Zero struct first so partial allocations can be safely freed
+    memset(lg, 0, sizeof(LocalGradients));
+    
+    // Allocate all gradient buffers with NULL checks
     lg->d_conv1_w = calloc(64 * CNN_INPUT_CHANNELS * 9, sizeof(float));
     lg->d_conv1_b = calloc(64, sizeof(float));
     lg->d_conv2_w = calloc(64 * 64 * 9, sizeof(float));
@@ -164,6 +178,19 @@ static void local_grads_init(LocalGradients *lg) {
     lg->d_value_b1 = calloc(256, sizeof(float));
     lg->d_value_w2 = calloc(256, sizeof(float));
     lg->d_value_b2 = calloc(1, sizeof(float));
+    
+    // Check all allocations succeeded
+    if (!lg->d_conv1_w || !lg->d_conv1_b || !lg->d_conv2_w || !lg->d_conv2_b ||
+        !lg->d_conv3_w || !lg->d_conv3_b || !lg->d_conv4_w || !lg->d_conv4_b ||
+        !lg->d_bn1_gamma || !lg->d_bn1_beta || !lg->d_bn2_gamma || !lg->d_bn2_beta ||
+        !lg->d_bn3_gamma || !lg->d_bn3_beta || !lg->d_bn4_gamma || !lg->d_bn4_beta ||
+        !lg->d_policy_w || !lg->d_policy_b || !lg->d_value_w1 || !lg->d_value_b1 ||
+        !lg->d_value_w2 || !lg->d_value_b2) {
+        local_grads_free(lg);
+        return ERR_MEMORY;
+    }
+    
+    return ERR_OK;
 }
 
 static void local_grads_free(LocalGradients *lg) {
@@ -289,10 +316,12 @@ float cnn_train_step(CNNWeights *w, const TrainingSample *batch, int batch_size,
     {
         // Thread-local gradient accumulator
         LocalGradients local;
-        local_grads_init(&local);
+        int init_failed = (local_grads_init(&local) != ERR_OK);
         
         #pragma omp for schedule(dynamic, 64)
         for (int i = 0; i < batch_size; i++) {
+            // Skip if gradient allocation failed for this thread
+            if (init_failed) continue;
             // 1. Encode input
             float player;
             float input[CNN_INPUT_CHANNELS * 64];

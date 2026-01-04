@@ -49,6 +49,9 @@ static inline float rng_gamma(RNG *r, float alpha) {
 // =============================================================================
 // Use rng_global() to access a thread-local RNG instance. Call rng_global_init()
 // once at program startup to seed the global RNG.
+//
+// THREAD SAFETY: Uses pthread_once for one-time initialization to prevent
+// race conditions when multiple threads call rng_global() simultaneously.
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -57,19 +60,29 @@ static inline float rng_gamma(RNG *r, float alpha) {
 #define RNG_MAX_THREADS 1
 #endif
 
-// Global RNG storage (declared static inline for header-only usage)
+#include <pthread.h>
+
+// Global RNG storage
 static RNG g_rng_pool[RNG_MAX_THREADS];
-static int g_rng_initialized = 0;
+static uint32_t g_rng_base_seed = 0;  // Set before first rng_global() call
+static pthread_once_t g_rng_once = PTHREAD_ONCE_INIT;
+
+// Internal: One-time initialization (called by pthread_once)
+static void rng_do_init(void) {
+    uint32_t seed = g_rng_base_seed ? g_rng_base_seed : (uint32_t)time(NULL);
+    for (int i = 0; i < RNG_MAX_THREADS; i++) {
+        rng_seed(&g_rng_pool[i], seed ^ (i * 2654435761u));  // Golden ratio hash
+    }
+}
 
 /**
- * Initialize the global RNG pool. Call once at program startup.
- * Seeds each thread's RNG with a unique value based on time and thread ID.
+ * Initialize the global RNG pool with a specific seed.
+ * Thread-safe: Can be called from any thread, will only initialize once.
+ * If called multiple times, only the first seed value is used.
  */
 static inline void rng_global_init(uint32_t base_seed) {
-    for (int i = 0; i < RNG_MAX_THREADS; i++) {
-        rng_seed(&g_rng_pool[i], base_seed ^ (i * 2654435761u));  // Golden ratio hash
-    }
-    g_rng_initialized = 1;
+    if (base_seed != 0) g_rng_base_seed = base_seed;  // Set before init
+    pthread_once(&g_rng_once, rng_do_init);
 }
 
 /**
@@ -77,9 +90,7 @@ static inline void rng_global_init(uint32_t base_seed) {
  * Auto-initializes with time-based seed if not already initialized.
  */
 static inline RNG* rng_global(void) {
-    if (!g_rng_initialized) {
-        rng_global_init((uint32_t)time(NULL));
-    }
+    pthread_once(&g_rng_once, rng_do_init);
 #ifdef _OPENMP
     int tid = omp_get_thread_num();
     return &g_rng_pool[tid < RNG_MAX_THREADS ? tid : 0];
@@ -89,3 +100,4 @@ static inline RNG* rng_global(void) {
 }
 
 #endif // RNG_H
+

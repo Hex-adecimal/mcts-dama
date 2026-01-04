@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
+#include "dama/common/logging.h"
 
 // =============================================================================
 // ARENA ALLOCATOR
@@ -32,7 +33,7 @@ typedef struct {
 static inline int arena_init(Arena *a, size_t total_size) {
     a->buffer = malloc(total_size);
     if (!a->buffer) {
-        fprintf(stderr, "ERROR: Malloc failed for Arena of size %zu\n", total_size);
+        log_error("[Arena] Malloc failed for size %zu", total_size);
         return -1;
     }
     a->size = total_size;
@@ -52,7 +53,7 @@ static inline void* arena_alloc(Arena *a, size_t bytes) {
     
     if (a->offset + padding + bytes > a->size) {
         pthread_mutex_unlock(&a->lock);
-        fprintf(stderr, "ERROR: Arena Out of Memory! (Size: %zu, Requested: %zu)\n", a->size, bytes);
+        log_error("[Arena] Out of Memory! (Size: %zu, Requested: %zu)", a->size, bytes);
         return NULL;
     }
     

@@ -41,8 +41,14 @@ The project implements a complete AlphaZero-style pipeline:
 3. **Full Loop**: Automate the entire process using the provided script.
 
    ```bash
-   ./scripts/train_loop.sh [iterations] [games_per_iter]
+   ./scripts/train_loop.sh
    ```
+
+   This runs a Scaled AlphaZero loop:
+   - Self-Play (500 games)
+   - Dataset Trim (Window: 1.5M samples)
+   - Train (1 Epoch @ 128 batch)
+   - Tournament Evaluation & Promotion
 
 For detailed information on the data pipeline, see [docs/architecture.md](docs/architecture.md).
 

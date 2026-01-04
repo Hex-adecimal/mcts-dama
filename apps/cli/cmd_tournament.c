@@ -156,6 +156,9 @@ int cmd_tournament(int argc, char **argv) {
     int nodes = 0;  // 0 = no node limit, use time only
     int use_parallel = 1;
 
+    char *p1_path = NULL;
+    char *p2_path = NULL;
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: dama tournament [options]\n");
@@ -164,12 +167,19 @@ int cmd_tournament(int argc, char **argv) {
             printf("  -n <n>      MCTS nodes (default: 800)\n");
             printf("  -t <sec>    Time limit per move (default: 1.0)\n");
             printf("  --serial    Run games serially (default: parallel)\n");
+            printf("  --p1-path <file>  Custom weights for Player 1 (Candidate)\n");
+            printf("  --p2-path <file>  Custom weights for Player 2 (Opponent)\n");
             return 0;
         }
         else if (strcmp(argv[i], "-g") == 0 && i+1 < argc) games = atoi(argv[++i]);
         else if (strcmp(argv[i], "-n") == 0 && i+1 < argc) nodes = atoi(argv[++i]);
         else if (strcmp(argv[i], "-t") == 0 && i+1 < argc) time_limit = atof(argv[++i]);
         else if (strcmp(argv[i], "--serial") == 0) use_parallel = 0;
+        else if (strcmp(argv[i], "--p1-path") == 0 && i+1 < argc) p1_path = argv[++i];
+        else if (strcmp(argv[i], "--p2-path") == 0 && i+1 < argc) p2_path = argv[++i];
+        else if (strcmp(argv[i], "--p1-type") == 0 && i+1 < argc) { i++; /* Ignore legacy arg */ }
+        else if (strcmp(argv[i], "--p2-type") == 0 && i+1 < argc) { i++; /* Ignore legacy arg */ }
+        else if (strcmp(argv[i], "--timeout") == 0 && i+1 < argc) time_limit = atof(argv[++i]); /* Alias for -t */
     }
     
     // Init Deps
@@ -181,13 +191,30 @@ int cmd_tournament(int argc, char **argv) {
     CNNWeights w3, w_active;
     cnn_init(&w3); cnn_init(&w_active);
     
-    // Load V3 and Active
-    if(cnn_load_weights(&w3, "out/models/cnn_weights_v3.bin") != 0) printf("Warning: V3 missing\n");
-    if(cnn_load_weights(&w_active, "out/models/cnn_weights.bin") != 0) printf("Warning: Active model missing\n");
-    
-    // Setup Players
     TournamentPlayer players[16];
-    int n = setup_roster(players, &w3, &w_active, nodes);
+    int n = 0;
+
+    if (p1_path && p2_path) {
+        printf("Running Dual Tournament (Candidate vs Defender)...\n");
+        if(cnn_load_weights(&w_active, p1_path) != 0) { printf("Error loading P1: %s\n", p1_path); return 1; }
+        if(cnn_load_weights(&w3, p2_path) != 0) { printf("Error loading P2: %s\n", p2_path); return 1; }
+
+        // Player 1: Candidate
+        MCTSConfig c1 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
+        c1.max_nodes = nodes; c1.cnn_weights = &w_active;
+        players[n++] = (TournamentPlayer){.name="Candidate", .desc="Training Candidate", .config=c1, .elo=1200};
+
+        // Player 2: Best (Defender)
+        MCTSConfig c2 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
+        c2.max_nodes = nodes; c2.cnn_weights = &w3; 
+        players[n++] = (TournamentPlayer){.name="Best", .desc="Current Best", .config=c2, .elo=1200};
+    } 
+    else {
+        // Default Three-Way
+        if(cnn_load_weights(&w3, "out/models/cnn_weights_v3.bin") != 0) printf("Warning: V3 missing\n");
+        if(cnn_load_weights(&w_active, "out/models/cnn_weights.bin") != 0) printf("Warning: Active model missing\n");
+        n = setup_roster(players, &w3, &w_active, nodes);
+    }
     
     // Run
     TournamentSystemConfig cfg = {
@@ -217,7 +244,14 @@ int cmd_tournament(int argc, char **argv) {
     cli_view_print_tournament_roster(&rv);
     
     g_players = players;
+    g_players = players;
     tournament_run(&cfg);
+    g_players = NULL;
+
+    // Helper for script parsing
+    if (n == 2) {
+        printf("Match Analysis: Player 1 (%s) Wins: %d\n", players[0].name, players[0].wins);
+    }
     g_players = NULL;
     
     // Cleanup

@@ -10,6 +10,7 @@
 #include "dama/search/mcts_worker.h"
 #include "dama/neural/cnn.h"
 #include "dama/common/params.h"
+#include "dama/common/debug.h"
 #include "dama/engine/movegen.h"
 #include <time.h>
 #include <stdio.h>
@@ -33,6 +34,7 @@ extern int get_tree_node_count(Node *node);
 // Helper to determine game result
 // Returns: 1 = White Win, 2 = Black Win, 0 = Draw, -1 = Ongoing
 static int get_game_result(const GameState *state) {
+    DBG_NOT_NULL(state);
     if (state->moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) return 0; // Draw
     
     MoveList ml;
@@ -205,6 +207,8 @@ static void mcts_step_sequential(Node *root, Arena *arena, MCTSConfig config) {
 
 Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig config,
                  MCTSStats *stats, Node **out_new_root) {
+    DBG_NOT_NULL(root);
+    DBG_NOT_NULL(arena);
     struct timespec start_ts, current_ts;
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
     

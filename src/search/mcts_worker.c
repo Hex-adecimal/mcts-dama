@@ -3,10 +3,13 @@
  * 
  * Extracted from mcts_search.c for better modularity.
  * Contains: InferenceQueue, WorkerArgs, mcts_worker()
+ * 
+ * Uses shared helpers from mcts_internal.h to avoid code duplication.
  */
 
 #include "dama/search/mcts.h"
 #include "dama/search/mcts_tree.h"
+#include "dama/search/mcts_internal.h"
 #include "dama/neural/cnn.h"
 #include "dama/common/params.h"
 #include "dama/engine/movegen.h"
@@ -53,93 +56,15 @@ typedef struct {
 } WorkerArgs;
 
 // =============================================================================
-// HELPER FUNCTIONS (copied from mcts_search.c)
+// WORKER EXPANSION WRAPPER
 // =============================================================================
 
-// Helper to determine game result for terminal nodes
-static int get_game_result_worker(const GameState *state) {
-    if (state->moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) return 0;
-    
-    MoveList ml;
-    generate_moves(state, &ml);
-    
-    if (ml.count == 0) {
-        return (state->current_player == WHITE) ? 2 : 1;
-    }
-    
-    return -1;
-}
-
-static void solve_terminal_node_worker(Node *leaf, MCTSConfig config, MCTSStats *stats) {
-    double result = 0.0;
-    int res = get_game_result_worker(&leaf->state);
-    if (res == 1) result = (leaf->state.current_player == WHITE) ? 1.0 : 0.0;
-    else if (res == 2) result = (leaf->state.current_player == BLACK) ? 1.0 : 0.0;
-    else result = config.draw_score;
-    
-    backpropagate(leaf, result, config.use_solver);
-    if (stats) stats->total_iterations++;
-}
-
+// Wrapper that dispatches to the appropriate shared helper based on config
 static Node* perform_expansion_worker(Node *leaf, Arena *arena, MCTSConfig config, float *policy, MCTSStats *stats) {
     if (config.cnn_weights) {
-        pthread_mutex_lock(&leaf->lock);
-        if (leaf->num_children == 0 && !leaf->is_terminal) {
-            MoveList legal_moves;
-            generate_moves(&leaf->state, &legal_moves);
-            
-            if (legal_moves.count > 0) {
-                leaf->children = arena_alloc(arena, legal_moves.count * sizeof(Node*));
-                
-                float sum = 0.0f;
-                float *filtered_policy = arena_alloc(arena, legal_moves.count * sizeof(float));
-                
-                for (int i=0; i<legal_moves.count; i++) {
-                    int idx = cnn_move_to_index(&legal_moves.moves[i], leaf->state.current_player);
-                    float p = (idx >= 0 && policy) ? policy[idx] : 0.0f;
-                    filtered_policy[i] = p;
-                    sum += p;
-                }
-                
-                for (int i=0; i<legal_moves.count; i++) {
-                    if (sum > 1e-6) filtered_policy[i] /= sum;
-                    else filtered_policy[i] = 1.0f / legal_moves.count;
-                    GameState child_state = leaf->state;
-                    apply_move(&child_state, &legal_moves.moves[i]);
-                    
-                    Node *child = create_node(leaf, legal_moves.moves[i], child_state, arena, config);
-                    
-                    child->prior = filtered_policy[i];
-                    leaf->children[i] = child;
-                }
-                
-                leaf->untried_moves.count = 0;
-                atomic_thread_fence(memory_order_release);
-                leaf->num_children = legal_moves.count;
-                
-                if (stats) {
-                    stats->total_expansions++;
-                    stats->total_policy_cached += legal_moves.count;
-                }
-
-            } else {
-                leaf->is_terminal = 1;
-            }
-        }
-        pthread_mutex_unlock(&leaf->lock);
-        return leaf;
+        return mcts_expand_with_policy(leaf, arena, config, policy, stats);
     } else {
-        pthread_mutex_lock(&leaf->lock);
-        Node *next = leaf;
-        if (!leaf->is_terminal) {
-            next = expand_node(leaf, arena, NULL, config);
-            if (stats) {
-                stats->total_expansions++;
-                stats->total_policy_cached++;
-            }
-        }
-        pthread_mutex_unlock(&leaf->lock);
-        return next;
+        return mcts_expand_vanilla(leaf, arena, config, stats);
     }
 }
 
@@ -164,9 +89,9 @@ void *mcts_worker(void *arg) {
         // 1. Selection (with Virtual Loss)
         Node *leaf = select_promising_node(root, config);
         
-        // Check for terminal state
+        // Check for terminal state - use shared helper from mcts_internal.h
         if (leaf->is_terminal) {
-            solve_terminal_node_worker(leaf, config, args->local_stats);
+            mcts_handle_terminal(leaf, config, args->local_stats);
              continue;
         }
 

@@ -4,10 +4,11 @@
 
 #include "dama/training/selfplay.h"
 #include "dama/common/rng.h"
+#include "dama/common/logging.h"
 #include "dama/engine/movegen.h"
 #include "dama/neural/cnn.h"
 #include "dama/training/dataset.h"
-#include "dama/engine/endgame.h"  // Include endgame generator
+#include "dama/engine/endgame.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +41,6 @@ typedef enum {
 #define DEFAULT_DIRICHLET_ALPHA 0.3f
 #define DEFAULT_DIRICHLET_EPSILON 0.25f
 #define DEFAULT_TEMP_THRESHOLD 30
-#define MAX_MOVES_WITHOUT_CAPTURES 40
 
 // =============================================================================
 // HELPERS
@@ -53,7 +53,7 @@ static void add_dirichlet_noise(Node *root, RNG *rng, float eps, float alpha) {
     // Check after malloc to prevent crash on allocation failure
     float *noise = malloc(n * sizeof(float));
     if (!noise) {
-        fprintf(stderr, "[selfplay] Warning: Failed to allocate Dirichlet noise array\n");
+        log_warn("[selfplay] Failed to allocate Dirichlet noise array");
         return;
     }
     
@@ -282,7 +282,7 @@ void selfplay_run(const SelfplayConfig *sp_cfg, const MCTSConfig *mcts_cfg) {
         int alloc_failed = (!history || !batch);
         
         if (alloc_failed) {
-            fprintf(stderr, "[selfplay] Error: Failed to allocate game buffers (thread %d)\n", omp_get_thread_num());
+            log_error("[selfplay] Failed to allocate game buffers (thread %d)", omp_get_thread_num());
             free(history);
             free(batch);
             history = NULL;
