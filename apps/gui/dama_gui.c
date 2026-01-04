@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
-#include "game.h"
-#include "movegen.h"
-#include "mcts.h"
-#include "cnn.h"
-#include "mcts.h"
-#include "params.h"
+#include "dama/engine/game.h"
+#include "dama/engine/movegen.h"
+#include "dama/search/mcts.h"
+#include "dama/neural/cnn.h"
+#include "dama/search/mcts.h"
+#include "dama/common/params.h"
 
 
 // --- CONSTANTS ---
@@ -325,38 +325,10 @@ int main(void) {
     arena_init(&mcts_arena, ARENA_SIZE);
 
     // 1. Config Grandmaster (Hard)
-    config_gm = (MCTSConfig){
-        .ucb1_c = UCB1_C,
-        .rollout_epsilon = ROLLOUT_EPSILON_RANDOM,
-        .use_ucb1_tuned = 1,
-        .use_tt = 1,
-        .use_solver = 1,
-        .use_progressive_bias = 1,
-        .bias_constant = DEFAULT_BIAS_CONSTANT,
-        .use_fpu = 1,
-        .fpu_value = FPU_VALUE,
-        .use_decaying_reward = 1,
-        .decay_factor = DEFAULT_DECAY_FACTOR,
-        .weights = { 
-            .w_capture = W_CAPTURE, .w_promotion = W_PROMOTION, .w_advance = W_ADVANCE, 
-            .w_center = W_CENTER, .w_edge = W_EDGE, .w_base = W_BASE, 
-            .w_threat = W_THREAT, .w_lady_activity = W_LADY_ACTIVITY 
-        }
-    };
+    config_gm = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
 
     // 2. Config Vanilla (Simple)
-    config_vanilla = (MCTSConfig){
-        .ucb1_c = 1.414, // Standard
-        .rollout_epsilon = 1.0, // Fully random rollouts
-        .use_ucb1_tuned = 0,
-        .use_tt = 0,
-        .use_solver = 0,
-        .use_progressive_bias = 0,
-        .use_fpu = 0,
-        .use_decaying_reward = 0,
-        // Weights ignored in Vanilla random rollout usually, but safe to init
-        .weights = {0} 
-    };
+    config_vanilla = mcts_get_preset(MCTS_PRESET_VANILLA);
 
     // 3. Config Neural Network (AlphaZero)
     cnn_init(&cnn_weights);
@@ -447,9 +419,8 @@ int main(void) {
                     handle_click(e.button.x, e.button.y);
                 }
             } else if (e.type == SDL_KEYDOWN) {
-                // Debug force AI
+                // Force AI move with spacebar (for debugging purposes)
                 if (e.key.keysym.sym == SDLK_SPACE) {
-                     printf("DEBUG: Force AI Trigger\n");
                      ai_move();
                 }
             }

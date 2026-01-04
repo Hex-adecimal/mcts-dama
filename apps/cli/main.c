@@ -16,7 +16,7 @@
 // NOTE: cli_view.c first (shared views), then cmd_data.c (provides DatasetSplit)
 // =============================================================================
 
-#include "../../src/ui/cli_view.c"
+#include "../../src/engine/cli_view.c"
 #include "cmd_data.c"
 #include "cmd_train.c"
 #include "cmd_tournament.c"

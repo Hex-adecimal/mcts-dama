@@ -8,9 +8,9 @@
  * 4. Target policy verification (are targets correct?)
  */
 
-#include "dataset.h"
-#include "cnn.h"
-#include "game.h"
+#include "dama/training/dataset.h"
+#include "dama/neural/cnn.h"
+#include "dama/engine/game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>

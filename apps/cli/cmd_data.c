@@ -6,17 +6,17 @@
  * - inspect/merge commands (used by CLI)
  */
 
-#include "dataset.h"
-#include "game.h"
-#include "logging.h"
+#include "dama/training/dataset.h"
+#include "dama/engine/game.h"
+#include "dama/common/logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <locale.h>
 #include <dirent.h>
-#include "../../src/nn/dataset_analysis.h"
-#include "../../src/ui/cli_view.h"
+#include "dama/training/dataset_analysis.h"
+#include "dama/common/cli_view.h"
 
 // =============================================================================
 // DATA STRUCTURES

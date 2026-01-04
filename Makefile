@@ -4,12 +4,12 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     CC = clang
     LIBOMP_PREFIX = /opt/homebrew/opt/libomp
-    CFLAGS = -Wall -Wextra -std=c99 -O3 -ffast-math -mcpu=apple-m2 -flto -funroll-loops -MMD -MP -Isrc -Isrc/core -Isrc/mcts -Isrc/nn -Isrc/ui
+    CFLAGS = -Wall -Wextra -std=c99 -O3 -ffast-math -mcpu=apple-m2 -flto -funroll-loops -MMD -MP -Iinclude
     CFLAGS += -Xclang -fopenmp -I$(LIBOMP_PREFIX)/include -DACCELERATE_NEW_LAPACK
     LDFLAGS = -lm -L$(LIBOMP_PREFIX)/lib -lomp -framework Accelerate
 else
     CC = gcc
-    CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Isrc -Isrc/core -Isrc/mcts -Isrc/nn -Isrc/ui 
+    CFLAGS = -Wall -Wextra -std=c99 -O3 -march=native -flto -MMD -MP -Iinclude
     CFLAGS += -fopenmp
     LDFLAGS = -lm -fopenmp
 endif
@@ -18,20 +18,26 @@ OBJ_DIR = obj
 BIN_DIR = bin
 
 # =============================================================================
-# SOURCE FILES
+# SOURCE FILES (New Structure)
 # =============================================================================
 
-# Core module
-CORE_SRCS = src/core/game.c src/core/movegen.c src/core/endgame.c
+# Engine module (ex core/)
+ENGINE_SRCS = src/engine/game.c src/engine/movegen.c src/engine/endgame.c
 
-# MCTS module (consolidated from 7 files to 3)
-MCTS_SRCS = src/mcts/mcts.c src/mcts/mcts_tree.c src/mcts/mcts_rollout.c src/mcts/tournament.c
+# Search module (ex mcts/)
+SEARCH_SRCS = src/search/mcts_search.c src/search/mcts_utils.c src/search/mcts_tree.c src/search/mcts_selection.c src/search/mcts_rollout.c src/search/mcts_worker.c
 
-# NN module
-NN_SRCS = src/nn/dataset.c src/nn/dataset_analysis.c src/nn/selfplay.c src/nn/training_pipeline.c src/nn/cnn_core.c src/nn/cnn_inference.c src/nn/cnn_training.c src/nn/conv_ops.c
+# Neural module (inference only, ex part of nn/)
+NEURAL_SRCS = src/neural/cnn_core.c src/neural/cnn_io.c src/neural/cnn_inference.c src/neural/conv_ops.c src/neural/cnn_batch_norm.c src/neural/cnn_encode.c
+
+# Training module (training pipeline, ex part of nn/)
+TRAINING_SRCS = src/training/cnn_training.c src/training/dataset.c src/training/dataset_analysis.c src/training/selfplay.c src/training/training_pipeline.c
+
+# Tournament module (moved from src/mcts/ to apps/tournament/)
+TOURNAMENT_SRCS = apps/tournament/tournament.c
 
 # All library sources
-LIB_SRCS = $(CORE_SRCS) $(MCTS_SRCS) $(NN_SRCS)
+LIB_SRCS = $(ENGINE_SRCS) $(SEARCH_SRCS) $(NEURAL_SRCS) $(TRAINING_SRCS) $(TOURNAMENT_SRCS)
 
 # Object files
 LIB_OBJS = $(LIB_SRCS:%.c=$(OBJ_DIR)/%.o)
@@ -50,13 +56,8 @@ main: all
 .PHONY: main
 
 # Unified CLI (main binary)
-CLI_SRCS = src/ui/cli_view.c apps/cli/cmd_data.c apps/cli/cmd_train.c apps/cli/cmd_tournament.c
-$(TARGET): $(BIN_DIR) $(OBJ_DIR) apps/cli/main.c $(CLI_SRCS)
+$(TARGET): $(BIN_DIR) $(OBJ_DIR) apps/cli/main.c
 	$(CC) $(CFLAGS) -o $@ apps/cli/main.c $(LIB_SRCS) $(LDFLAGS)
-
-# Tournament (legacy tool)
-tournament: $(BIN_DIR) $(OBJ_DIR)
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/tournament legacy/tools/evaluation/tournament.c $(LIB_SRCS) $(LDFLAGS)
 
 # SDL2 GUI
 SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null || echo "-I/opt/homebrew/include -I/usr/local/include")
@@ -67,7 +68,45 @@ gui: $(BIN_DIR) $(OBJ_DIR)
 
 # Tests
 tests: $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/run_tests test/unit/test_game.c $(LIB_SRCS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -Itests/unit -o $(BIN_DIR)/run_tests tests/unit/test_main.c $(LIB_SRCS) $(LDFLAGS)
+
+# Run tests (builds if needed)
+test: tests
+	./$(BIN_DIR)/run_tests
+
+test-engine: tests
+	./$(BIN_DIR)/run_tests engine
+
+test-search: tests
+	./$(BIN_DIR)/run_tests search
+
+test-neural: tests
+	./$(BIN_DIR)/run_tests neural
+
+test-training: tests
+	./$(BIN_DIR)/run_tests training
+
+test-common: tests
+	./$(BIN_DIR)/run_tests common
+
+# Benchmarks
+benchmarks: $(BIN_DIR)
+	$(CC) $(CFLAGS) -Itests/benchmark -o $(BIN_DIR)/run_bench tests/benchmark/bench_main.c $(LIB_SRCS) $(LDFLAGS)
+
+bench: benchmarks
+	./$(BIN_DIR)/run_bench
+
+bench-engine: benchmarks
+	./$(BIN_DIR)/run_bench engine
+
+bench-neural: benchmarks
+	./$(BIN_DIR)/run_bench neural
+
+bench-mcts: benchmarks
+	./$(BIN_DIR)/run_bench mcts
+
+bench-training: benchmarks
+	./$(BIN_DIR)/run_bench training
 
 # =============================================================================
 # BUILD RULES
@@ -89,4 +128,4 @@ clean:
 
 -include $(DEPS)
 
-.PHONY: all clean tournament gui tests
+.PHONY: all clean gui tests test test-engine test-search test-neural test-training test-common benchmarks bench bench-engine bench-neural bench-mcts bench-training

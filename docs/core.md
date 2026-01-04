@@ -2,18 +2,23 @@
 
 ## Italian Checkers (Dama Italiana) Engine
 
-Questo documento descrive l'architettura e le scelte implementative del modulo core per la Dama Italiana.
+Questo documento descrive l'architettura e le scelte implementative del modulo engine per la Dama Italiana.
 
 ---
 
 ## Architettura
 
 ```
-_src/core/
-├── game.h      # Tipi, costanti, macro, stato di gioco
-├── game.c      # Inizializzazione, esecuzione mosse, Zobrist hashing
-├── movegen.h   # Interfaccia generazione mosse
-└── movegen.c   # Lookup tables, generazione mosse/catture
+src/engine/
+├── game.c        # Inizializzazione, esecuzione mosse, Zobrist hashing
+├── movegen.c     # Lookup tables, generazione mosse/catture
+├── endgame.c     # Generazione posizioni endgame per training
+└── cli_view.c    # Output CLI formattato
+
+include/dama/engine/
+├── game.h        # Tipi, costanti, macro, stato di gioco
+├── movegen.h     # Interfaccia generazione mosse
+└── endgame.h     # Interfaccia endgame generator
 ```
 
 ---

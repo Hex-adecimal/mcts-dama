@@ -2,11 +2,11 @@
  * cmd_tournament.c - Tournament Controller
  */
 
-#include "logging.h"
-#include "../../src/ui/cli_view.h"
-#include "../../src/mcts/tournament.h"
-#include "../../src/core/movegen.h"
-#include "cnn.h"
+#include "dama/common/logging.h"
+#include "dama/common/cli_view.h"
+#include "dama/search/tournament.h"
+#include "dama/engine/movegen.h"
+#include "dama/neural/cnn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +24,7 @@ static void on_start(int total) {
 }
 
 static void on_match_start(int i, int j, const char *n1, const char *n2) {
+    (void)i; (void)j;
     printf("\n[%s vs %s]\n", n1, n2);
 }
 

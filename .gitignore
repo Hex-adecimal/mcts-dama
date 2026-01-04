@@ -32,3 +32,4 @@ data/
 models/
 logs/
 training_log.txt
+out/

@@ -17,12 +17,8 @@ Monte Carlo Tree Search implementation for Italian Checkers (Dama) with optimize
 ```bash
 make          # Build main game CLI (bin/dama)
 make gui      # Build graphical interface (bin/game_gui)
-make tests    # Build and run unit tests
-make tournament # Build and run full tournament
-make selfplay # Build training data generator (selfplay)
-make bootstrap # Build initial heuristic data generator
-make trainer  # Build neural network trainer
-make merger   # Build dataset management tool
+make test     # Build and run unit tests
+make bench    # Run performance benchmarks
 make clean    # Clean build artifacts
 ```
 
@@ -30,25 +26,19 @@ make clean    # Clean build artifacts
 
 The project implements a complete AlphaZero-style pipeline:
 
-1. **Bootstrap (Optional)**: Generate initial data from heuristic-only MCTS to kickstart the network.
+1. **Self-Play**: The network plays against itself to generate policy/value data.
 
    ```bash
-   make bootstrap && ./bin/bootstrap
+   ./bin/dama selfplay --games 100 --output data/train.bin
    ```
 
-2. **Self-Play**: The network plays against itself to generate improved policy/value data.
+2. **Training**: Train the CNN on the generated data.
 
    ```bash
-   make selfplay && ./bin/selfplay [num_games]
+   ./bin/dama train --data data/train.bin --epochs 50
    ```
 
-3. **Training**: Train the CNN on the newly generated data.
-
-   ```bash
-   make trainer && ./bin/trainer [data_file.bin]
-   ```
-
-4. **Full Loop**: Automate the entire process using the provided script.
+3. **Full Loop**: Automate the entire process using the provided script.
 
    ```bash
    ./scripts/train_loop.sh [iterations] [games_per_iter]
@@ -58,16 +48,65 @@ For detailed information on the data pipeline, see [docs/architecture.md](docs/a
 
 ## Project Structure
 
-The codebase is organized into modular components for easier maintenance:
-
-- **`src/core/`**: Game logic and rule enforcement.
-- **`src/mcts/`**: Modular MCTS engine (Selection, Expansion, Simulation, Backprop).
-- **`src/nn/`**: Standardized CNN modules (`cnn_core.c`, `cnn_inference.c`, `cnn_training.c`).
-- **`tools/`**: Domain-specific tools for training, evaluation, and data processing.
-- **`data/`**: Standardized directory for datasets (`bootstrap/`, `selfplay/`, `iterations/`).
-- **`logs/`**: Categorized logs for monitoring the entire pipeline.
-
-For a full breakdown of the files and architecture, refer to the [Architecture Documentation](docs/architecture.md).
+```
+MCTS Dama/
+├── src/                      # Source code
+│   ├── engine/               # Game logic (4 files, ~900 lines)
+│   │   ├── game.c            # State management, apply_move
+│   │   ├── movegen.c         # Move generation with lookup tables
+│   │   ├── endgame.c         # Endgame position generator
+│   │   └── cli_view.c        # Formatted CLI output
+│   │
+│   ├── search/               # MCTS engine (6 files, ~1,400 lines)
+│   │   ├── mcts_search.c     # Main search loop, async batching
+│   │   ├── mcts_selection.c  # UCB1, UCB1-Tuned, PUCT algorithms
+│   │   ├── mcts_tree.c       # Node creation, expansion, backprop
+│   │   ├── mcts_worker.c     # Thread pool, inference queue
+│   │   ├── mcts_rollout.c    # Vanilla rollout policy
+│   │   └── mcts_utils.c      # Policy extraction, diagnostics
+│   │
+│   ├── neural/               # CNN modules (6 files, ~1,000 lines)
+│   │   ├── cnn_inference.c   # Forward pass (single & batch)
+│   │   ├── cnn_core.c        # Weight init (He/Xavier)
+│   │   ├── cnn_batch_norm.c  # Fused BN+ReLU
+│   │   ├── cnn_encode.c      # State → tensor encoding
+│   │   ├── conv_ops.c        # im2col + sgemm convolutions
+│   │   └── cnn_io.c          # Weight save/load
+│   │
+│   ├── training/             # Training pipeline (5 files, ~1,400 lines)
+│   │   ├── cnn_training.c    # Backward pass, SGD optimizer
+│   │   ├── selfplay.c        # Self-play data generation
+│   │   ├── training_pipeline.c # Epoch loop, LR scheduling
+│   │   ├── dataset.c         # Binary dataset I/O
+│   │   └── dataset_analysis.c # Dataset statistics
+│   │
+│   └── tuning/               # Hyperparameter tuning (stub)
+│       └── clop.c            # CLOP algorithm (not implemented)
+│
+├── include/dama/             # Header files
+│   ├── common/               # RNG, logging, params
+│   ├── engine/               # game.h, movegen.h, endgame.h
+│   ├── neural/               # cnn.h, cnn_types.h, conv_ops.h
+│   ├── search/               # mcts.h, mcts_config.h, mcts_types.h, etc.
+│   └── training/             # dataset.h, selfplay.h, etc.
+│
+├── apps/                     # Applications
+│   ├── cli/                  # Command-line interface
+│   │   ├── main.c            # Entry point & command dispatch
+│   │   ├── cmd_train.c       # train command
+│   │   ├── cmd_data.c        # data inspect/merge/dedupe
+│   │   ├── cmd_diagnose.c    # NN diagnostics
+│   │   └── cmd_tournament.c  # Tournament launcher
+│   ├── gui/                  # SDL2 graphical interface
+│   │   └── dama_gui.c        # Board rendering, click handling
+│   └── tournament/           # Round-robin tournament
+│       └── tournament.c      # ELO calculation, stats
+│
+├── tests/                    # Unit tests (67 tests)
+├── docs/                     # Documentation
+├── scripts/                  # Automation scripts
+└── out/                      # Output (data, models, logs)
+```
 
 ## Usage
 
@@ -81,65 +120,23 @@ For a full breakdown of the files and architecture, refer to the [Architecture D
 Run a round-robin tournament between different MCTS configurations:
 
 ```bash
-make tournament && ./bin/tournament
+./bin/dama tournament
 ```
 
-## Roadmap & Enhancements
+## MCTS Enhancements (Browne et al. 2012)
 
-Structured according to *Browne et al. (2012) MCTS Survey*.
-
-### 1\. Tree Policy Enhancements
-
-#### Bandit Based
-
-- [x] **UCB1-Tuned**: Implement variance-based upper confidence bound to handle nodes with high score variance.
-- [ ] **UCB2**: A variant of UCB1 that is asymptotically efficient for K-armed bandits.
-- [x] **PUCT (Predictor + UCT)**: Incorporates prior probabilities (from CNN) into the UCB formula.
-
-#### Selection
-
-- [x] **Zobrist Hashing**: Incremental hashing to identify unique board states.
-- [x] **Transposition Table (DAG)**: Map identical states reached via different paths.
-- [x] **Progressive Bias**: Domain-specific heuristic knowledge added to UCB formula.
-- [x] **First Play Urgency (FPU)**: Assign fixed high value to unvisited nodes to encourage exploration.
-- [ ] **Decisive Moves**: Immediately play moves that lead to a win or prevent an immediate loss.
-- [ ] **Opening Books**: Use expert opening databases or MCTS-generated books.
-- [ ] **History Heuristic**: Use historical success of moves to bias selection.
-
-#### AMAF (All Moves As First)
-
-- [ ] **RAVE (Rapid Action Value Estimation)**: Share statistics between tree nodes assuming move value independence.
-
-#### Game Theoretic
-
-- [x] **MCTS-Solver**: Propagate "Proven Win" (+∞) and "Proven Loss" (-∞) values up the tree.
-- [ ] **Monte Carlo Proof-Number Search (MC-PNS)**: Use MC simulations to guide Proof-Number Search.
-
-#### Move Pruning
-
-- [ ] **Soft Pruning (Progressive Widening)**: Temporarily prune moves, revisiting them as visits increase.
-- [ ] **Hard Pruning**: Permanently remove moves that are statistically inferior.
-
-### 2\. Other Enhancements
-
-#### Simulation
-
-- [x] **Rule-Based Simulation Policy**: Use domain knowledge (captures, promotion) to bias simulations (Smart Rollouts).
-- [ ] **Learning a Simulation Policy (MAST/PAST)**: Use global move statistics to bias future simulations.
-- [ ] **Last Good Reply (LGR)**: Store successful replies and reuse them in simulations.
-
-#### Backpropagation
-
-- [x] **Transposition Table Updates**: Share statistics between nodes of the same state.
-- [x] **Decaying Reward**: Multiply reward by $\gamma < 1$ to weight early wins more heavily.
-- [ ] **Score Bonus**: Add bonus for short wins or long losses.
-
-#### Parallelisation
-
-- [ ] **Leaf Parallelisation**: Execute multiple simultaneous simulations from a leaf node.
-- [ ] **Root Parallelisation**: Build multiple trees simultaneously and merge results.
-- [x] **Tree Parallelisation**: All threads work on a shared tree using **Virtual Loss** and mutexes.
-- [x] **Async Batching**: Master thread processes NN inference batches from worker queues.
+| Category | Feature | Status |
+|----------|---------|--------|
+| **Bandit** | UCB1-Tuned | ✅ |
+| | PUCT (AlphaZero) | ✅ |
+| **Selection** | Transposition Table (DAG) | ✅ |
+| | Progressive Bias | ✅ |
+| | First Play Urgency (FPU) | ✅ |
+| | MCTS-Solver | ✅ |
+| **Simulation** | Smart Rollouts | ✅ |
+| **Backprop** | Decaying Reward | ✅ |
+| **Parallel** | Tree Parallelisation (Virtual Loss) | ✅ |
+| | Async CNN Batching | ✅ |
 
 ## License
 

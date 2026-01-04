@@ -5,12 +5,12 @@
  * Usage: dama train [options]
  */
 
-#include "logging.h"
-#include "../../src/ui/cli_view.h"
-#include "../../src/nn/selfplay.h"
-#include "../../src/nn/training_pipeline.h"
-#include "../../src/core/movegen.h"
-#include "../../src/params.h"
+#include "dama/common/logging.h"
+#include "dama/common/cli_view.h"
+#include "dama/training/selfplay.h"
+#include "dama/training/training_pipeline.h"
+#include "dama/engine/movegen.h"
+#include "dama/common/params.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +121,6 @@ int cmd_train(int argc, char **argv) {
         .temp = 1.0f,
         .output_file = "out/data/active.dat",
         .parallel_threads = get_max_threads(),
-        .mercy = { .threshold = 3.0f, .check_interval = 10 },
         .overwrite_data = 0,
         .on_start = sp_on_start,
         .on_progress = sp_on_progress,
