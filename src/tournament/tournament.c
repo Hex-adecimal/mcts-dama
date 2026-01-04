@@ -2,7 +2,7 @@
  * tournament.c - Tournament Logic
  */
 
-#include "dama/search/tournament.h"
+#include "dama/tournament/tournament.h"
 #include "dama/engine/game.h"
 #include "dama/engine/movegen.h"
 #include "dama/search/mcts.h" // mcts_create_root etc
@@ -88,7 +88,7 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
     
     while (1) {
         MoveList list;
-        generate_moves(&state, &list);
+        movegen_generate(&state, &list);
         if (list.count == 0) {
             int winner = (state.current_player == WHITE) ? BLACK : WHITE;
             if ((winner == WHITE && a_is_white) || (winner == BLACK && !a_is_white)) result = 1;

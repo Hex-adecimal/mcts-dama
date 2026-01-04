@@ -38,7 +38,7 @@ static int get_game_result(const GameState *state) {
     if (state->moves_without_captures >= MAX_MOVES_WITHOUT_CAPTURES) return 0; // Draw
     
     MoveList ml;
-    generate_moves(state, &ml);
+    movegen_generate(state, &ml);
     
     if (ml.count == 0) {
         // Current player has no moves -> Loses
@@ -100,7 +100,7 @@ static inline Node* perform_expansion(Node *leaf, Arena *arena, MCTSConfig confi
         if (leaf->num_children == 0 && !leaf->is_terminal) {
             if (config.verbose) printf("Expanding %p\n", leaf);
             MoveList legal_moves;
-            generate_moves(&leaf->state, &legal_moves);
+            movegen_generate(&leaf->state, &legal_moves);
             
             if (legal_moves.count > 0) {
                 leaf->children = arena_alloc(arena, legal_moves.count * sizeof(Node*));

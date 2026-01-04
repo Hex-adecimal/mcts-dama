@@ -8,7 +8,6 @@
 #define MCTS_WORKER_H
 
 #include "dama/search/mcts_types.h"
-#include "dama/search/mcts_arena.h"
 #include <pthread.h>
 
 // =============================================================================

@@ -38,7 +38,7 @@ typedef struct {
 static void find_captures(CaptureContext *ctx, int sq, int depth);
 
 // --- Initialization ---
-void init_move_tables(void) {
+void movegen_init(void) {
     if (move_tables_initialized) return;
     
     for (int sq = 0; sq < NUM_SQUARES; sq++) {
@@ -243,7 +243,7 @@ static void filter_moves(MoveList *list) {
 }
 
 // --- Public API ---
-void generate_simple_moves(const GameState *s, MoveList *list) {
+void movegen_generate_simple(const GameState *s, MoveList *list) {
     DBG_NOT_NULL(s);
     DBG_NOT_NULL(list);
     const Color us = s->current_player;
@@ -288,7 +288,7 @@ void generate_simple_moves(const GameState *s, MoveList *list) {
     }
 }
 
-void generate_captures(const GameState *s, MoveList *list) {
+void movegen_generate_captures(const GameState *s, MoveList *list) {
     DBG_NOT_NULL(s);
     DBG_NOT_NULL(list);
     const Color us = s->current_player;
@@ -343,22 +343,22 @@ void generate_captures(const GameState *s, MoveList *list) {
     }
 }
 
-void generate_moves(const GameState *s, MoveList *list) {
+void movegen_generate(const GameState *s, MoveList *list) {
     DBG_NOT_NULL(s);
     DBG_NOT_NULL(list);
     list->count = 0;
-    generate_captures(s, list);
+    movegen_generate_captures(s, list);
     
     if (list->count > 0) {
         filter_moves(list);
     } else {
-        generate_simple_moves(s, list);
+        movegen_generate_simple(s, list);
     }
 }
 
-int is_square_threatened(const GameState *state, const int square) {
+int movegen_is_square_threatened(const GameState *state, const int square) {
     MoveList enemy_moves;
-    generate_moves(state, &enemy_moves);
+    movegen_generate(state, &enemy_moves);
     
     for (int i = 0; i < enemy_moves.count; i++) {
         const Move *m = &enemy_moves.moves[i];

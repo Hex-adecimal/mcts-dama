@@ -144,7 +144,7 @@ TEST(neural_cnn_forward_with_history) {
     
     // Make a move to create history
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     GameState hist1 = state;
     apply_move(&state, &moves.moves[0]);
     

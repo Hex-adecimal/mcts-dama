@@ -24,6 +24,9 @@ BIN_DIR = bin
 # Engine module (ex core/)
 ENGINE_SRCS = src/engine/game.c src/engine/movegen.c src/engine/endgame.c
 
+# Common utilities module
+COMMON_SRCS = src/common/cli_view.c
+
 # Search module (ex mcts/)
 SEARCH_SRCS = src/search/mcts_search.c src/search/mcts_utils.c src/search/mcts_tree.c src/search/mcts_selection.c src/search/mcts_rollout.c src/search/mcts_worker.c
 
@@ -33,11 +36,18 @@ NEURAL_SRCS = src/neural/cnn_core.c src/neural/cnn_io.c src/neural/cnn_inference
 # Training module (training pipeline, ex part of nn/)
 TRAINING_SRCS = src/training/cnn_training.c src/training/dataset.c src/training/dataset_analysis.c src/training/selfplay.c src/training/training_pipeline.c
 
-# Tournament module (moved from src/mcts/ to apps/tournament/)
-TOURNAMENT_SRCS = apps/tournament/tournament.c
+# Tournament module
+TOURNAMENT_SRCS = src/tournament/tournament.c
+
+# Tuning module
+TUNING_SRCS = src/tuning/clop.c
+
+# CLI commands (compiled with main binary, not as library)
+CLI_SRCS = apps/cli/cmd_data.c apps/cli/cmd_train.c apps/cli/cmd_tournament.c \
+           apps/cli/cmd_diagnose.c apps/cli/cmd_clop.c
 
 # All library sources
-LIB_SRCS = $(ENGINE_SRCS) $(SEARCH_SRCS) $(NEURAL_SRCS) $(TRAINING_SRCS) $(TOURNAMENT_SRCS)
+LIB_SRCS = $(ENGINE_SRCS) $(COMMON_SRCS) $(SEARCH_SRCS) $(NEURAL_SRCS) $(TRAINING_SRCS) $(TOURNAMENT_SRCS) $(TUNING_SRCS)
 
 # Object files
 LIB_OBJS = $(LIB_SRCS:%.c=$(OBJ_DIR)/%.o)
@@ -56,8 +66,8 @@ main: all
 .PHONY: main
 
 # Unified CLI (main binary)
-$(TARGET): $(BIN_DIR) $(OBJ_DIR) apps/cli/main.c
-	$(CC) $(CFLAGS) -o $@ apps/cli/main.c $(LIB_SRCS) $(LDFLAGS)
+$(TARGET): $(BIN_DIR) $(OBJ_DIR) apps/cli/main.c $(CLI_SRCS)
+	$(CC) $(CFLAGS) -o $@ apps/cli/main.c $(CLI_SRCS) $(LIB_SRCS) $(LDFLAGS)
 
 # SDL2 GUI
 SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null || echo "-I/opt/homebrew/include -I/usr/local/include")

@@ -78,7 +78,7 @@ static void bench_engine(void) {
             GameState state;
             init_game(&state);
             MoveList moves;
-            generate_moves(&state, &moves);
+            movegen_generate(&state, &moves);
             iter++;
         }
         print_result("movegen: initial position", iter, get_time_ms() - start);
@@ -90,14 +90,14 @@ static void bench_engine(void) {
         init_game(&base_state);
         MoveList moves;
         for (int i = 0; i < 10; i++) {
-            generate_moves(&base_state, &moves);
+            movegen_generate(&base_state, &moves);
             if (moves.count > 0) apply_move(&base_state, &moves.moves[0]);
         }
         
         int iter = 0;
         double start = get_time_ms();
         while (get_time_ms() - start < TARGET_TIME_MS || iter < MIN_ITERATIONS) {
-            generate_moves(&base_state, &moves);
+            movegen_generate(&base_state, &moves);
             iter++;
         }
         print_result("movegen: midgame position", iter, get_time_ms() - start);
@@ -108,7 +108,7 @@ static void bench_engine(void) {
         GameState state;
         init_game(&state);
         MoveList moves;
-        generate_moves(&state, &moves);
+        movegen_generate(&state, &moves);
         Move m = moves.moves[0];
         
         int iter = 0;
@@ -471,7 +471,7 @@ int main(int argc, char **argv) {
     // Initialize
     srand(time(NULL));
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     
     const char *filter = (argc > 1) ? argv[1] : NULL;
     

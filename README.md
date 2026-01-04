@@ -57,10 +57,12 @@ For detailed information on the data pipeline, see [docs/architecture.md](docs/a
 ```
 MCTS Dama/
 ├── src/                      # Source code
-│   ├── engine/               # Game logic (4 files, ~900 lines)
-│   │   ├── game.c            # State management, apply_move
+│   ├── engine/               # Game logic (3 files)
+│   │   ├── game.c            # State management, game_apply_move
 │   │   ├── movegen.c         # Move generation with lookup tables
-│   │   ├── endgame.c         # Endgame position generator
+│   │   └── endgame.c         # Endgame position generator
+│   │
+│   ├── common/               # Shared utilities
 │   │   └── cli_view.c        # Formatted CLI output
 │   │
 │   ├── search/               # MCTS engine (6 files, ~1,400 lines)
@@ -86,15 +88,20 @@ MCTS Dama/
 │   │   ├── dataset.c         # Binary dataset I/O
 │   │   └── dataset_analysis.c # Dataset statistics
 │   │
+│   ├── tournament/           # Tournament system
+│   │   └── tournament.c      # Round-robin, ELO calculation
+│   │
 │   └── tuning/               # Hyperparameter tuning (stub)
 │       └── clop.c            # CLOP algorithm (not implemented)
 │
 ├── include/dama/             # Header files
-│   ├── common/               # RNG, logging, params
+│   ├── common/               # cli_view, RNG, logging, params
 │   ├── engine/               # game.h, movegen.h, endgame.h
 │   ├── neural/               # cnn.h, cnn_types.h, conv_ops.h
-│   ├── search/               # mcts.h, mcts_config.h, mcts_types.h, etc.
-│   └── training/             # dataset.h, selfplay.h, etc.
+│   ├── search/               # mcts.h, mcts_config.h, mcts_types.h
+│   ├── tournament/           # tournament.h
+│   ├── training/             # dataset.h, selfplay.h
+│   └── tuning/               # clop.h
 │
 ├── apps/                     # Applications
 │   ├── cli/                  # Command-line interface
@@ -103,12 +110,10 @@ MCTS Dama/
 │   │   ├── cmd_data.c        # data inspect/merge/dedupe
 │   │   ├── cmd_diagnose.c    # NN diagnostics
 │   │   └── cmd_tournament.c  # Tournament launcher
-│   ├── gui/                  # SDL2 graphical interface
-│   │   └── dama_gui.c        # Board rendering, click handling
-│   └── tournament/           # Round-robin tournament
-│       └── tournament.c      # ELO calculation, stats
+│   └── gui/                  # SDL2 graphical interface
+│       └── dama_gui.c        # Board rendering, click handling
 │
-├── tests/                    # Unit tests (67 tests)
+├── tests/                    # Unit tests (79 tests)
 ├── docs/                     # Documentation
 ├── scripts/                  # Automation scripts
 └── out/                      # Output (data, models, logs)

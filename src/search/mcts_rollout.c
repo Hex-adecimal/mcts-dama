@@ -38,7 +38,7 @@ static Move pick_smart_move(const MoveList *list, const GameState *state, int us
                 apply_move(&future_state, &m);
                 
                 MoveList enemy_moves;
-                generate_moves(&future_state, &enemy_moves);
+                movegen_generate(&future_state, &enemy_moves);
                 
                 if (enemy_moves.count > 0 && enemy_moves.moves[0].length > 0) {
                     score -= WEIGHT_DANGER;
@@ -91,7 +91,7 @@ double simulate_rollout(Node *node, MCTSConfig config) {
                     MAX_ROLLOUT_DEPTH;
     
     while (depth < max_depth) {
-        generate_moves(&temp_state, &temp_moves);
+        movegen_generate(&temp_state, &temp_moves);
 
         if (temp_moves.count == 0) {
             int winner = (temp_state.current_player == WHITE) ? BLACK : WHITE;

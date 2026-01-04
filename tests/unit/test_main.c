@@ -24,7 +24,7 @@
 #include "dama/engine/movegen.h"
 #include "dama/engine/endgame.h"
 #include "dama/search/mcts.h"
-#include "dama/search/mcts_tt.h"
+#include "dama/search/mcts_types.h"
 #include "dama/neural/cnn.h"
 #include "dama/training/dataset.h"
 #include "dama/common/rng.h"
@@ -51,8 +51,8 @@ static void register_all_tests(void) {
     REGISTER_TEST(engine_check_bit_works_correctly);
     REGISTER_TEST(engine_zobrist_keys_are_unique);
     REGISTER_TEST(engine_hash_changes_after_move);
-    REGISTER_TEST(engine_generate_moves_initial_position_has_7_moves);
-    REGISTER_TEST(engine_generate_simple_moves_only_non_captures);
+    REGISTER_TEST(engine_movegen_generate_initial_position_has_7_moves);
+    REGISTER_TEST(engine_movegen_generate_simple_only_non_captures);
     REGISTER_TEST(engine_captures_are_mandatory);
     REGISTER_TEST(engine_apply_move_switches_player);
     REGISTER_TEST(engine_apply_move_updates_board);
@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
     
     // Initialize game systems needed for tests
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     
     printf("╔══════════════════════════════════════════════════╗\n");
     printf("║           MCTS Dama Unit Test Suite              ║\n");

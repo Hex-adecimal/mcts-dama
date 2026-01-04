@@ -11,6 +11,7 @@
 #include "dama/training/dataset.h"
 #include "dama/neural/cnn.h"
 #include "dama/engine/game.h"
+#include "dama/engine/movegen.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -89,7 +90,7 @@ int cmd_diagnose(int argc, char **argv) {
     // 3. Load weights and run forward pass
     printf("[3] Loading weights from %s...\n", weights_path);
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     
     CNNWeights weights;
     cnn_init(&weights);

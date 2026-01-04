@@ -40,9 +40,8 @@
 // =============================================================================
 
 #define DEFAULT_ROLLOUT_EPSILON     0.2     // Epsilon-greedy probability
-#define ROLLOUT_EPSILON_SMART       0.1     // Greedy (10% random)
-#define ROLLOUT_EPSILON_HEURISTIC   0.0     // 100% Heuristic
-#define ROLLOUT_EPSILON_RANDOM      1.0     // Fully random
+#define ROLLOUT_EPSILON_HEURISTIC   0.0     // 100% Heuristic (no random)
+#define ROLLOUT_EPSILON_RANDOM      1.0     // Fully random rollout
 #define ROLLOUT_EPSILON_NN          0.0     // No rollouts (Neural Net only)
 
 // Fast Rollout Material Advantage Thresholds

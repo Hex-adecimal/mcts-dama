@@ -194,7 +194,7 @@ int cmd_train(int argc, char **argv) {
     
     // Setup
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     
     // Load Model
     CNNWeights weights;

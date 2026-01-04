@@ -74,7 +74,7 @@ static void add_dirichlet_noise(Node *root, RNG *rng, float eps, float alpha) {
 
 static int game_over(const GameState *s) {
     MoveList m;
-    generate_moves(s, &m);
+    movegen_generate(s, &m);
     return m.count == 0;
 }
 
@@ -116,7 +116,7 @@ static int play_game(
         // 2 random opening moves (only for normal games)
         for (int i = 0; i < 2; i++) {
             MoveList list;
-            generate_moves(&state, &list);
+            movegen_generate(&state, &list);
             if (list.count > 0) {
                 int idx = rng_u32(rng) % list.count;
                 apply_move(&state, &list.moves[idx]);

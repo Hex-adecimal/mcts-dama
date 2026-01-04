@@ -61,7 +61,7 @@ int setup_random_endgame(GameState *state, RNG *rng);
  */
 static inline int position_has_moves(const GameState *state) {
     MoveList ml;
-    generate_moves(state, &ml);
+    movegen_generate(state, &ml);
     return ml.count > 0;
 }
 

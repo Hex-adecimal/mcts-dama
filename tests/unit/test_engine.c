@@ -81,7 +81,7 @@ TEST(engine_hash_changes_after_move) {
     uint64_t initial_hash = state.hash;
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     ASSERT_GT(moves.count, 0);
     
     apply_move(&state, &moves.moves[0]);
@@ -93,23 +93,23 @@ TEST(engine_hash_changes_after_move) {
 // MOVE GENERATION TESTS
 // =============================================================================
 
-TEST(engine_generate_moves_initial_position_has_7_moves) {
+TEST(engine_movegen_generate_initial_position_has_7_moves) {
     GameState state;
     init_game(&state);
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     
     // In Italian Checkers initial position, White has 7 possible moves
     ASSERT_EQ(7, moves.count);
 }
 
-TEST(engine_generate_simple_moves_only_non_captures) {
+TEST(engine_movegen_generate_simple_only_non_captures) {
     GameState state;
     init_game(&state);
     
     MoveList simple_moves;
-    generate_simple_moves(&state, &simple_moves);
+    movegen_generate_simple(&state, &simple_moves);
     
     // All moves should be non-captures (length == 0)
     for (int i = 0; i < simple_moves.count; i++) {
@@ -137,7 +137,7 @@ TEST(engine_captures_are_mandatory) {
     state.current_player = WHITE;
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     
     // White must capture - all moves should be captures
     for (int i = 0; i < moves.count; i++) {
@@ -152,7 +152,7 @@ TEST(engine_apply_move_switches_player) {
     ASSERT_EQ(WHITE, state.current_player);
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     apply_move(&state, &moves.moves[0]);
     
     ASSERT_EQ(BLACK, state.current_player);
@@ -163,7 +163,7 @@ TEST(engine_apply_move_updates_board) {
     init_game(&state);
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     
     Move m = moves.moves[0];
     int from_sq = m.path[0];
@@ -195,7 +195,7 @@ TEST(engine_promotion_to_lady) {
     state.current_player = WHITE;
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     
     ASSERT_GT(moves.count, 0);
     
@@ -228,7 +228,7 @@ TEST(engine_lady_moves_all_directions) {
     state.current_player = WHITE;
     
     MoveList moves;
-    generate_moves(&state, &moves);
+    movegen_generate(&state, &moves);
     
     // Lady on C3 should have moves in multiple directions
     // At least 1 move expected (could be more depending on implementation)

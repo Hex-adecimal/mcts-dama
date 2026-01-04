@@ -16,11 +16,16 @@
 // NOTE: cli_view.c first (shared views), then cmd_data.c (provides DatasetSplit)
 // =============================================================================
 
-#include "../../src/engine/cli_view.c"
-#include "cmd_data.c"
-#include "cmd_train.c"
-#include "cmd_tournament.c"
-#include "cmd_diagnose.c"
+// cli_view.c now compiled as part of LIB_SRCS, just include the header
+#include "dama/common/cli_view.h"
+
+// External command handlers (compiled separately via CLI_SRCS in Makefile)
+extern int cmd_data(int argc, char **argv);
+extern int cmd_train(int argc, char **argv);
+extern int cmd_tournament(int argc, char **argv);
+extern int cmd_diagnose(int argc, char **argv);
+extern int cmd_clop(int argc, char **argv);
+
 
 // =============================================================================
 // COMMAND REGISTRY
@@ -37,6 +42,7 @@ static Command commands[] = {
     {"tournament", "Run MCTS tournament",                cmd_tournament},
     {"data",       "Data utilities (inspect, merge)",    cmd_data},
     {"diagnose",   "CNN training diagnostics",           cmd_diagnose},
+    {"clop",       "CLOP hyperparameter tuning",         cmd_clop},
     {NULL, NULL, NULL}
 };
 

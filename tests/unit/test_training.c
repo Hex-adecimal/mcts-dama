@@ -199,7 +199,7 @@ TEST(training_sample_policy_sums_to_valid) {
 
 TEST(training_cnn_train_step_reduces_loss) {
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     
     CNNWeights weights;
     cnn_init(&weights);

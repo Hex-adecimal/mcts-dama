@@ -4,7 +4,7 @@
 
 #include "dama/common/logging.h"
 #include "dama/common/cli_view.h"
-#include "dama/search/tournament.h"
+#include "dama/tournament/tournament.h"
 #include "dama/engine/movegen.h"
 #include "dama/neural/cnn.h"
 #include <stdio.h>
@@ -184,7 +184,7 @@ int cmd_tournament(int argc, char **argv) {
     
     // Init Deps
     zobrist_init();
-    init_move_tables();
+    movegen_init();
     srand(time(NULL));
     
     // Load Weights
@@ -244,7 +244,6 @@ int cmd_tournament(int argc, char **argv) {
     cli_view_print_tournament_roster(&rv);
     
     g_players = players;
-    g_players = players;
     tournament_run(&cfg);
     g_players = NULL;
 
@@ -252,7 +251,6 @@ int cmd_tournament(int argc, char **argv) {
     if (n == 2) {
         printf("Match Analysis: Player 1 (%s) Wins: %d\n", players[0].name, players[0].wins);
     }
-    g_players = NULL;
     
     // Cleanup
     cnn_free(&w3); cnn_free(&w_active);

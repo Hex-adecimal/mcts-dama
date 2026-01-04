@@ -96,17 +96,6 @@ float cnn_get_move_prior(const CNNWeights *w, const GameState *state,
 void cnn_zero_gradients(CNNWeights *w);
 
 /**
- * Backward pass: compute gradients for a single sample.
- * Gradients are accumulated (not overwritten).
- */
-void cnn_backward(
-    CNNWeights *w,
-    const GameState *state,
-    const float *target_policy,
-    float target_value
-);
-
-/**
  * Update weights using SGD with momentum.
  */
 void cnn_clip_gradients(CNNWeights *w, float threshold);

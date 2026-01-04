@@ -89,7 +89,7 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
     
     node->heuristic_score = evaluate_move_heuristic(&node->state, &node->move_from_parent, config);
     
-    generate_moves(&node->state, &node->untried_moves);
+    movegen_generate(&node->state, &node->untried_moves);
     node->is_terminal = (node->untried_moves.count == 0 && node->num_children == 0) ? 1 : 0;
     
     // Solver init
@@ -109,7 +109,7 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
         
         if (config.weights.w_threat > 0.0) {
             int dest = (move.length == 0) ? move.path[1] : move.path[move.length];
-            if (is_square_threatened(&node->state, dest)) {
+            if (movegen_is_square_threatened(&node->state, dest)) {
                 node->heuristic_score -= config.weights.w_threat;
             }
         }
@@ -125,7 +125,7 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
                 cnn_forward_with_history((CNNWeights*)config.cnn_weights, &parent->state, hist1, hist2, &out);
                 
                 MoveList legal_moves;
-                generate_moves(&parent->state, &legal_moves);
+                movegen_generate(&parent->state, &legal_moves);
                 
                 double sum = 0.0;
                 for (int i = 0; i < legal_moves.count; i++) {
