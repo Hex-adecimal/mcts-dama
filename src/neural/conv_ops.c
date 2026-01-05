@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <Accelerate/Accelerate.h>
+#include "dama/neural/cnn_types.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -207,6 +208,34 @@ void conv2d_backward(
         // col2im (parallelized internally)
         col2im(col_buffer, Ci, H, W, K, pad, d_input);
     }
+}
+
+// =============================================================================
+// SHAPE-BASED API (Reduced arguments)
+// =============================================================================
+
+void conv2d_forward_s(
+    const float *input,
+    const float *kernel,
+    const float *bias,
+    float *output,
+    ConvShape shape
+) {
+    conv2d_forward(input, kernel, bias, output, 
+                   shape.H, shape.W, shape.C_in, shape.C_out, shape.K);
+}
+
+void conv2d_backward_s(
+    const float *input,
+    const float *kernel,
+    const float *d_output,
+    float *d_input,
+    float *d_kernel,
+    float *d_bias,
+    ConvShape shape
+) {
+    conv2d_backward(input, kernel, d_output, d_input, d_kernel, d_bias,
+                    shape.H, shape.W, shape.C_in, shape.C_out, shape.K);
 }
 
 // =============================================================================

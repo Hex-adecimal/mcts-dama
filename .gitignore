@@ -33,3 +33,6 @@ models/
 logs/
 training_log.txt
 out/
+
+# Keep agent rules
+!.agent/

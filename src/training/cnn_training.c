@@ -77,7 +77,7 @@ void cnn_forward_train(
     float *fc_input, float *policy_out, float *value_h, float *value_out
 ) {
     // 1. Layer 1 (Fused BN+ReLU)
-    conv2d_forward(input, w->conv1_w, w->conv1_b, conv1_pre, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+    conv2d_forward_s(input, w->conv1_w, w->conv1_b, conv1_pre, CONV1_SHAPE);
     batch_norm_forward_relu(conv1_pre, w->bn1_gamma, w->bn1_beta, bn1_out, bn1_pre_relu, bn1_mean, bn1_var, w->bn1_mean, w->bn1_var, 64, 8, 8, 1);
 
     // 2. Layer 2 (Fused BN+ReLU)
@@ -229,8 +229,125 @@ static void local_grads_merge(CNNWeights *w, LocalGradients *lg) {
     w->d_value_b2[0] += lg->d_value_b2[0];
 }
 
-// NOTE: cnn_backward_sample was removed - logic is inlined in cnn_train_step
+// =============================================================================
+// LOSS COMPUTATION HELPERS
+// =============================================================================
 
+// Cross-entropy loss between predicted policy and target distribution
+static float compute_policy_loss(const float *policy_out, const float *target_policy) {
+    float loss = 0.0f;
+    for (int j = 0; j < 512; j++) {
+        loss -= target_policy[j] * logf(policy_out[j] + 1e-10f);
+    }
+    return loss;
+}
+
+// Mean squared error loss for value prediction
+static float compute_value_loss(float value_out, float target_value) {
+    float diff = value_out - target_value;
+    return diff * diff;
+}
+
+// =============================================================================
+// BACKWARD PASS HELPERS
+// =============================================================================
+
+// Compute gradients for value head layers (FC2 -> FC1)
+static void backward_value_head(
+    const CNNWeights *w,
+    const float *fc_input,
+    const float *value_h,
+    float value_out,
+    float target_value,
+    float *d_fc_input,
+    LocalGradients *lg
+) {
+    // d_value = dL/dv * dv/dtanh = 2*(v - target) * (1 - v^2)
+    float d_value = 2.0f * (value_out - target_value) * (1.0f - value_out * value_out);
+    
+    // Value FC2 backward: d_W2, d_b2
+    float d_v_h[256];
+    for (int j = 0; j < 256; j++) {
+        float dv_act = d_value * w->value_w2[j] * (value_h[j] > 0 ? 1.0f : 0.0f);
+        d_v_h[j] = dv_act;
+        lg->d_value_w2[j] += d_value * value_h[j];
+    }
+    lg->d_value_b2[0] += d_value;
+    
+    // Value FC1 backward (BLAS optimized)
+    // d_W1 += d_v_h ⊗ fc_input (outer product)
+    cblas_sger(CblasRowMajor, 256, 4097, 1.0f,
+               d_v_h, 1, fc_input, 1, lg->d_value_w1, 4097);
+    // d_fc_input += W1^T * d_v_h (transposed matvec)
+    cblas_sgemv(CblasRowMajor, CblasTrans, 256, 4097, 1.0f,
+                w->value_w1, 4097, d_v_h, 1, 1.0f, d_fc_input, 1);
+    // d_bias1 += d_v_h
+    for (int j = 0; j < 256; j++) lg->d_value_b1[j] += d_v_h[j];
+}
+
+// Compute gradients for policy head layer (softmax -> FC)
+static void backward_policy_head(
+    const CNNWeights *w,
+    const float *fc_input,
+    const float *policy_out,
+    const float *target_policy,
+    float *d_fc_input,
+    LocalGradients *lg
+) {
+    // d_policy = softmax_out - target (cross-entropy + softmax derivative)
+    float d_policy[512];
+    for (int j = 0; j < 512; j++) {
+        d_policy[j] = policy_out[j] - target_policy[j];
+    }
+    
+    // Policy FC backward (BLAS optimized)
+    // d_W += d_policy ⊗ fc_input (outer product)
+    cblas_sger(CblasRowMajor, 512, 4097, 1.0f,
+               d_policy, 1, fc_input, 1, lg->d_policy_w, 4097);
+    // d_fc_input += W^T * d_policy (transposed matvec)
+    cblas_sgemv(CblasRowMajor, CblasTrans, 512, 4097, 1.0f,
+                w->policy_w, 4097, d_policy, 1, 1.0f, d_fc_input, 1);
+    // d_bias += d_policy
+    for (int j = 0; j < 512; j++) lg->d_policy_b[j] += d_policy[j];
+}
+
+// Compute gradients for convolutional backbone (4 layers, reverse order)
+static void backward_conv_layers(
+    const CNNWeights *w,
+    const float *input,
+    const float *d_fc_input,
+    const ForwardContext *ctx,
+    LocalGradients *lg
+) {
+    // Layer 4 backward
+    float d_bn4[64*64], d_conv4_pre[64*64];
+    memcpy(d_bn4, d_fc_input, 4096 * sizeof(float));
+    for (int j = 0; j < 64 * 64; j++) if (ctx->layer[3].pre_relu[j] <= 0) d_bn4[j] = 0;
+    batch_norm_backward(d_bn4, ctx->layer[3].conv_pre, w->bn4_gamma, ctx->layer[3].mean, ctx->layer[3].var, 
+                        d_conv4_pre, lg->d_bn4_gamma, lg->d_bn4_beta, 64, 8, 8);
+
+    // Layer 3 backward
+    float d_bn3[64*64], d_conv3_pre[64*64];
+    conv2d_backward(ctx->layer[2].bn_out, w->conv4_w, d_conv4_pre, d_bn3, lg->d_conv4_w, lg->d_conv4_b, 8, 8, 64, 64, 3);
+    for (int j = 0; j < 64 * 64; j++) if (ctx->layer[2].pre_relu[j] <= 0) d_bn3[j] = 0;
+    batch_norm_backward(d_bn3, ctx->layer[2].conv_pre, w->bn3_gamma, ctx->layer[2].mean, ctx->layer[2].var,
+                        d_conv3_pre, lg->d_bn3_gamma, lg->d_bn3_beta, 64, 8, 8);
+
+    // Layer 2 backward
+    float d_bn2[64*64], d_conv2_pre[64*64];
+    conv2d_backward(ctx->layer[1].bn_out, w->conv3_w, d_conv3_pre, d_bn2, lg->d_conv3_w, lg->d_conv3_b, 8, 8, 64, 64, 3);
+    for (int j = 0; j < 64 * 64; j++) if (ctx->layer[1].pre_relu[j] <= 0) d_bn2[j] = 0;
+    batch_norm_backward(d_bn2, ctx->layer[1].conv_pre, w->bn2_gamma, ctx->layer[1].mean, ctx->layer[1].var,
+                        d_conv2_pre, lg->d_bn2_gamma, lg->d_bn2_beta, 64, 8, 8);
+
+    // Layer 1 backward
+    float d_bn1[64*64], d_conv1_pre[64*64], d_input[CNN_INPUT_CHANNELS * 64];
+    conv2d_backward(ctx->layer[0].bn_out, w->conv2_w, d_conv2_pre, d_bn1, lg->d_conv2_w, lg->d_conv2_b, 8, 8, 64, 64, 3);
+    for (int j = 0; j < 64 * 64; j++) if (ctx->layer[0].pre_relu[j] <= 0) d_bn1[j] = 0;
+    batch_norm_backward(d_bn1, ctx->layer[0].conv_pre, w->bn1_gamma, ctx->layer[0].mean, ctx->layer[0].var,
+                        d_conv1_pre, lg->d_bn1_gamma, lg->d_bn1_beta, 64, 8, 8);
+    conv2d_backward(input, w->conv1_w, d_conv1_pre, d_input, lg->d_conv1_w, lg->d_conv1_b, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+}
 
 // =============================================================================
 // SGD OPTIMIZER
@@ -341,76 +458,45 @@ float cnn_train_step(CNNWeights *w, const TrainingSample *batch, int batch_size,
                 conv4_pre, bn4_out, bn4_pre_relu, bn4_mean, bn4_var,
                 fc_input, policy_out, value_h, &value_out);
             
-            // 3. Compute loss using SAME forward outputs
-            float p_loss = 0;
-            for (int j = 0; j < 512; j++) {
-                p_loss -= batch[i].target_policy[j] * logf(policy_out[j] + 1e-10f);
-            }
-            float v_loss = (value_out - batch[i].target_value) * (value_out - batch[i].target_value);
+            // 3. Compute losses using helper functions
+            float p_loss = compute_policy_loss(policy_out, batch[i].target_policy);
+            float v_loss = compute_value_loss(value_out, batch[i].target_value);
             
             total_p_loss += p_loss;
             total_v_loss += v_loss;
             total_loss += (p_loss + v_loss);
 
-            // 4. Backward pass using SAME forward buffers (no recomputation!)
-            float d_policy[512], d_value;
-            for (int j = 0; j < 512; j++) d_policy[j] = policy_out[j] - batch[i].target_policy[j];
-            d_value = 2.0f * (value_out - batch[i].target_value) * (1.0f - value_out * value_out);
-
-            // FC gradients
+            // 4. Backward pass using helper functions
             float d_fc_input[4097];
             memset(d_fc_input, 0, sizeof(d_fc_input));
             
-            // Value Head backward
-            float d_v_h[256];
-            for (int j = 0; j < 256; j++) {
-                float dv_act = d_value * w->value_w2[j] * (value_h[j] > 0 ? 1.0f : 0.0f);
-                d_v_h[j] = dv_act;
-                local.d_value_w2[j] += d_value * value_h[j];
-                local.d_value_b2[0] += d_value;
-            }
+            // Value head backward
+            backward_value_head(w, fc_input, value_h, value_out, 
+                               batch[i].target_value, d_fc_input, &local);
             
-            // Value FC1 backward (BLAS optimized)
-            // d_W1 += d_v_h ⊗ fc_input (outer product)
-            cblas_sger(CblasRowMajor, 256, 4097, 1.0f,
-                       d_v_h, 1, fc_input, 1, local.d_value_w1, 4097);
-            // d_fc_input += W1^T * d_v_h (transposed matvec)
-            cblas_sgemv(CblasRowMajor, CblasTrans, 256, 4097, 1.0f,
-                        w->value_w1, 4097, d_v_h, 1, 1.0f, d_fc_input, 1);
-            // d_bias1 += d_v_h
-            for (int j = 0; j < 256; j++) local.d_value_b1[j] += d_v_h[j];
-
-            // Policy Head backward (BLAS optimized)
-            // d_W += d_policy ⊗ fc_input (outer product)
-            cblas_sger(CblasRowMajor, 512, 4097, 1.0f,
-                       d_policy, 1, fc_input, 1, local.d_policy_w, 4097);
-            // d_fc_input += W^T * d_policy (transposed matvec)
-            cblas_sgemv(CblasRowMajor, CblasTrans, 512, 4097, 1.0f,
-                        w->policy_w, 4097, d_policy, 1, 1.0f, d_fc_input, 1);
-            // d_bias += d_policy
-            for (int j = 0; j < 512; j++) local.d_policy_b[j] += d_policy[j];
-
-            // Conv backward using SAME pre_relu buffers
-            float d_bn4[64*64], d_conv4_pre[64*64];
-            memcpy(d_bn4, d_fc_input, 4096 * sizeof(float)); 
-            for (int j = 0; j < 64 * 64; j++) if (bn4_pre_relu[j] <= 0) d_bn4[j] = 0;
-            batch_norm_backward(d_bn4, conv4_pre, w->bn4_gamma, bn4_mean, bn4_var, d_conv4_pre, local.d_bn4_gamma, local.d_bn4_beta, 64, 8, 8);
-
-            float d_bn3[64*64], d_conv3_pre[64*64];
-            conv2d_backward(bn3_out, w->conv4_w, d_conv4_pre, d_bn3, local.d_conv4_w, local.d_conv4_b, 8, 8, 64, 64, 3);
-            for (int j = 0; j < 64 * 64; j++) if (bn3_pre_relu[j] <= 0) d_bn3[j] = 0;
-            batch_norm_backward(d_bn3, conv3_pre, w->bn3_gamma, bn3_mean, bn3_var, d_conv3_pre, local.d_bn3_gamma, local.d_bn3_beta, 64, 8, 8);
-
-            float d_bn2[64*64], d_conv2_pre[64*64];
-            conv2d_backward(bn2_out, w->conv3_w, d_conv3_pre, d_bn2, local.d_conv3_w, local.d_conv3_b, 8, 8, 64, 64, 3);
-            for (int j = 0; j < 64 * 64; j++) if (bn2_pre_relu[j] <= 0) d_bn2[j] = 0;
-            batch_norm_backward(d_bn2, conv2_pre, w->bn2_gamma, bn2_mean, bn2_var, d_conv2_pre, local.d_bn2_gamma, local.d_bn2_beta, 64, 8, 8);
-
-            float d_bn1[64*64], d_conv1_pre[64*64], d_input[CNN_INPUT_CHANNELS * 64];
-            conv2d_backward(bn1_out, w->conv2_w, d_conv2_pre, d_bn1, local.d_conv2_w, local.d_conv2_b, 8, 8, 64, 64, 3);
-            for (int j = 0; j < 64 * 64; j++) if (bn1_pre_relu[j] <= 0) d_bn1[j] = 0;
-            batch_norm_backward(d_bn1, conv1_pre, w->bn1_gamma, bn1_mean, bn1_var, d_conv1_pre, local.d_bn1_gamma, local.d_bn1_beta, 64, 8, 8);
-            conv2d_backward(input, w->conv1_w, d_conv1_pre, d_input, local.d_conv1_w, local.d_conv1_b, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+            // Policy head backward
+            backward_policy_head(w, fc_input, policy_out, 
+                                batch[i].target_policy, d_fc_input, &local);
+            
+            // Convolutional backbone backward (using ForwardContext)
+            ForwardContext ctx = {
+                .layer = {
+                    {conv1_pre, bn1_out, bn1_pre_relu, {0}, {0}},
+                    {conv2_pre, bn2_out, bn2_pre_relu, {0}, {0}},
+                    {conv3_pre, bn3_out, bn3_pre_relu, {0}, {0}},
+                    {conv4_pre, NULL, bn4_pre_relu, {0}, {0}}
+                }
+            };
+            memcpy(ctx.layer[0].mean, bn1_mean, 64 * sizeof(float));
+            memcpy(ctx.layer[0].var, bn1_var, 64 * sizeof(float));
+            memcpy(ctx.layer[1].mean, bn2_mean, 64 * sizeof(float));
+            memcpy(ctx.layer[1].var, bn2_var, 64 * sizeof(float));
+            memcpy(ctx.layer[2].mean, bn3_mean, 64 * sizeof(float));
+            memcpy(ctx.layer[2].var, bn3_var, 64 * sizeof(float));
+            memcpy(ctx.layer[3].mean, bn4_mean, 64 * sizeof(float));
+            memcpy(ctx.layer[3].var, bn4_var, 64 * sizeof(float));
+            
+            backward_conv_layers(w, input, d_fc_input, &ctx, &local);
         }
         
         // Merge thread-local gradients into global (once per thread at end)

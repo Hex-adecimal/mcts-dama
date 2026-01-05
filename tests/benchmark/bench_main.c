@@ -18,7 +18,8 @@
 
 #include "dama/engine/game.h"
 #include "dama/engine/movegen.h"
-#include "dama/engine/endgame.h"
+#include "dama/engine/zobrist.h"
+#include "dama/training/endgame.h"
 #include "dama/search/mcts.h"
 #include "dama/neural/cnn.h"
 #include "dama/training/dataset.h"
@@ -131,6 +132,21 @@ static void bench_engine(void) {
             iter++;
         }
         print_result("init_game + zobrist", iter, get_time_ms() - start);
+    }
+    
+    // Explicit Zobrist Compute Hash
+    {
+        GameState state;
+        init_game(&state);
+        
+        int iter = 0;
+        double start = get_time_ms();
+        while (get_time_ms() - start < TARGET_TIME_MS || iter < MIN_ITERATIONS) {
+            volatile uint64_t hash = zobrist_compute_hash(&state);
+            (void)hash;
+            iter++;
+        }
+        print_result("zobrist_compute_hash", iter, get_time_ms() - start);
     }
     
     // Endgame generation

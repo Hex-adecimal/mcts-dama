@@ -17,9 +17,6 @@
 /**
  * Creates the root node for the MCTS search.
  */
-/**
- * Creates the root node for the MCTS search.
- */
 Node* mcts_create_root(GameState state, Arena *arena, MCTSConfig config);
 
 /**
@@ -42,14 +39,14 @@ void mcts_get_policy(Node *root, float *policy, float temperature, const GameSta
 // UTILITY FUNCTIONS
 // =============================================================================
 
-int get_tree_depth(Node *node);
-int get_tree_node_count(Node *node);
+int get_tree_depth(const Node *node);
+int get_tree_node_count(const Node *node);
 
 // =============================================================================
 // DIAGNOSTICS
 // =============================================================================
 
-double mcts_get_avg_root_ucb(Node *root, MCTSConfig config);
-void print_mcts_stats_sorted(Node *root);
+double mcts_get_avg_root_ucb(const Node *root, MCTSConfig config);
+void print_mcts_stats_sorted(const Node *root);
 
 #endif // MCTS_H

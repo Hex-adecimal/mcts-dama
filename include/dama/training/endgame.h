@@ -17,16 +17,7 @@
 // =============================================================================
 
 // Squares where pieces can be placed: (row + col) % 2 == 1
-static const int DARK_SQUARES[] = {
-    1, 3, 5, 7,      // row 0
-    8, 10, 12, 14,   // row 1
-    17, 19, 21, 23,  // row 2
-    24, 26, 28, 30,  // row 3
-    33, 35, 37, 39,  // row 4
-    40, 42, 44, 46,  // row 5
-    49, 51, 53, 55,  // row 6
-    56, 58, 60, 62   // row 7
-};
+extern const int DARK_SQUARES[];
 #define NUM_DARK_SQUARES 32
 
 // =============================================================================
@@ -48,7 +39,7 @@ typedef enum {
 // =============================================================================
 
 /**
- * Setup a random endgame position.
+ * @brief Setup a random endgame position.
  * 
  * @param state Output: the game state to initialize
  * @param rng Thread-local RNG for reproducibility
@@ -57,7 +48,9 @@ typedef enum {
 int setup_random_endgame(GameState *state, RNG *rng);
 
 /**
- * Check if a position has at least one legal move.
+ * @brief Check if a position has at least one legal move.
+ * @param state Pointer to the GameState to check.
+ * @return 1 if moves exist, 0 otherwise.
  */
 static inline int position_has_moves(const GameState *state) {
     MoveList ml;

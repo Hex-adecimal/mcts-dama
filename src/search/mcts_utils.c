@@ -10,6 +10,7 @@
 #include "dama/common/params.h"
 #include "dama/common/logging.h"
 #include "dama/engine/movegen.h"
+#include "dama/engine/game_view.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +33,7 @@ Node* mcts_create_root_with_history(GameState state, Arena *arena, MCTSConfig co
 // TREE TRAVERSAL
 // =============================================================================
 
-int get_tree_depth(Node *node) {
+int get_tree_depth(const Node *node) {
     if (node->num_children == 0) return 0;
     
     int max_depth = 0;
@@ -43,7 +44,7 @@ int get_tree_depth(Node *node) {
     return max_depth + 1;
 }
 
-int get_tree_node_count(Node *node) {
+int get_tree_node_count(const Node *node) {
     if (!node) return 0;
     int count = 1; // This node
     for (int i = 0; i < node->num_children; i++) {
@@ -116,7 +117,7 @@ void mcts_get_policy(Node *root, float *policy, float temperature, const GameSta
 // DIAGNOSTICS & DEBUG
 // =============================================================================
 
-double mcts_get_avg_root_ucb(Node *root, MCTSConfig config) {
+double mcts_get_avg_root_ucb(const Node *root, MCTSConfig config) {
     if (!root || root->num_children == 0) return 0.0;
     
     double total_ucb = 0.0;
@@ -143,7 +144,7 @@ static int compare_nodes_visits_desc(const void *a, const void *b) {
     return nodeB->visits - nodeA->visits;
 }
 
-void print_mcts_stats_sorted(Node *root) {
+void print_mcts_stats_sorted(const Node *root) {
     if (!root || root->num_children == 0) {
         printf("No children statistics available.\n");
         return;
@@ -186,7 +187,7 @@ void print_mcts_stats_sorted(Node *root) {
 }
 #else
 // Stub in release builds
-void print_mcts_stats_sorted(Node *root) {
+void print_mcts_stats_sorted(const Node *root) {
     (void)root;
 }
 #endif

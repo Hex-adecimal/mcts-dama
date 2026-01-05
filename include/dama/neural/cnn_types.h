@@ -28,6 +28,48 @@
 #define CNN_BN_MOMENTUM    0.1f    // Running stats update rate
 
 // =============================================================================
+// PARAMETER STRUCTURES (reduce function arguments)
+// =============================================================================
+
+/**
+ * Convolution layer shape parameters.
+ * Use to reduce function arguments from 5 to 1.
+ */
+typedef struct {
+    int H;      // Height (8)
+    int W;      // Width (8)
+    int C_in;   // Input channels
+    int C_out;  // Output channels
+    int K;      // Kernel size (3)
+} ConvShape;
+
+// Default shapes for this architecture
+#define CONV1_SHAPE ((ConvShape){8, 8, CNN_INPUT_CHANNELS, 64, 3})
+#define CONV2_SHAPE ((ConvShape){8, 8, 64, 64, 3})
+#define CONV3_SHAPE ((ConvShape){8, 8, 64, 64, 3})
+#define CONV4_SHAPE ((ConvShape){8, 8, 64, 64, 3})
+
+/**
+ * Buffer for a single conv+BN layer during training.
+ * Groups related activations to reduce function arguments.
+ */
+typedef struct {
+    float *conv_pre;    // Pre-BatchNorm activation [C][H][W]
+    float *bn_out;      // Post-BN output (NULL for layer4)
+    float *pre_relu;    // Pre-ReLU activation (for backward)
+    float mean[64];     // Batch mean
+    float var[64];      // Batch variance
+} LayerBuffers;
+
+/**
+ * Forward context containing all layer buffers for backward pass.
+ * Reduces backward_conv_layers arguments from 21 to 5.
+ */
+typedef struct {
+    LayerBuffers layer[4];  // Layers 0-3 (conv1-conv4)
+} ForwardContext;
+
+// =============================================================================
 // STRUCTURES
 // =============================================================================
 

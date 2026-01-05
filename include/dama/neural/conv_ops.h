@@ -67,6 +67,36 @@ void conv2d_backward(
 );
 
 // =============================================================================
+// SHAPE-BASED API (simplified arguments - include cnn_types.h for ConvShape)
+// =============================================================================
+
+#include "dama/neural/cnn_types.h"
+
+/**
+ * Forward pass using ConvShape (reduces 5 int args to 1 struct).
+ */
+void conv2d_forward_s(
+    const float *input,
+    const float *kernel,
+    const float *bias,
+    float *output,
+    ConvShape shape
+);
+
+/**
+ * Backward pass using ConvShape.
+ */
+void conv2d_backward_s(
+    const float *input,
+    const float *kernel,
+    const float *d_output,
+    float *d_input,
+    float *d_kernel,
+    float *d_bias,
+    ConvShape shape
+);
+
+// =============================================================================
 // TENSOR OPERATIONS
 // =============================================================================
 

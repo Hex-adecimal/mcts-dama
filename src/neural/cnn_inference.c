@@ -50,19 +50,19 @@ void cnn_forward_with_history(const CNNWeights *w, const GameState *state,
     float fc_input[4097], policy_out[512], value_h[256];
 
     // Layer 1 (Fused BN+ReLU)
-    conv2d_forward(input, w->conv1_w, w->conv1_b, conv1_out, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+    conv2d_forward_s(input, w->conv1_w, w->conv1_b, conv1_out, CONV1_SHAPE);
     batch_norm_forward_relu(conv1_out, w->bn1_gamma, w->bn1_beta, bn1_out, NULL, NULL, NULL, w->bn1_mean, w->bn1_var, 64, 8, 8, 0);
 
     // Layer 2
-    conv2d_forward(bn1_out, w->conv2_w, w->conv2_b, conv2_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn1_out, w->conv2_w, w->conv2_b, conv2_out, CONV2_SHAPE);
     batch_norm_forward_relu(conv2_out, w->bn2_gamma, w->bn2_beta, bn2_out, NULL, NULL, NULL, w->bn2_mean, w->bn2_var, 64, 8, 8, 0);
 
     // Layer 3
-    conv2d_forward(bn2_out, w->conv3_w, w->conv3_b, conv3_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn2_out, w->conv3_w, w->conv3_b, conv3_out, CONV3_SHAPE);
     batch_norm_forward_relu(conv3_out, w->bn3_gamma, w->bn3_beta, bn3_out, NULL, NULL, NULL, w->bn3_mean, w->bn3_var, 64, 8, 8, 0);
 
     // Layer 4
-    conv2d_forward(bn3_out, w->conv4_w, w->conv4_b, conv4_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn3_out, w->conv4_w, w->conv4_b, conv4_out, CONV4_SHAPE);
     batch_norm_forward_relu(conv4_out, w->bn4_gamma, w->bn4_beta, bn4_out, NULL, NULL, NULL, w->bn4_mean, w->bn4_var, 64, 8, 8, 0);
 
     // Flatten + Player
@@ -175,16 +175,16 @@ void cnn_forward_batch(const CNNWeights *w,
         float conv3_out[64 * 64], bn3_out[64 * 64];
         float conv4_out[64 * 64], bn4_out[64 * 64];
         
-        conv2d_forward(input, w->conv1_w, w->conv1_b, conv1_out, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+        conv2d_forward_s(input, w->conv1_w, w->conv1_b, conv1_out, CONV1_SHAPE);
         batch_norm_forward_relu(conv1_out, w->bn1_gamma, w->bn1_beta, bn1_out, NULL, NULL, NULL, w->bn1_mean, w->bn1_var, 64, 8, 8, 0);
         
-        conv2d_forward(bn1_out, w->conv2_w, w->conv2_b, conv2_out, 8, 8, 64, 64, 3);
+        conv2d_forward_s(bn1_out, w->conv2_w, w->conv2_b, conv2_out, CONV2_SHAPE);
         batch_norm_forward_relu(conv2_out, w->bn2_gamma, w->bn2_beta, bn2_out, NULL, NULL, NULL, w->bn2_mean, w->bn2_var, 64, 8, 8, 0);
         
-        conv2d_forward(bn2_out, w->conv3_w, w->conv3_b, conv3_out, 8, 8, 64, 64, 3);
+        conv2d_forward_s(bn2_out, w->conv3_w, w->conv3_b, conv3_out, CONV3_SHAPE);
         batch_norm_forward_relu(conv3_out, w->bn3_gamma, w->bn3_beta, bn3_out, NULL, NULL, NULL, w->bn3_mean, w->bn3_var, 64, 8, 8, 0);
         
-        conv2d_forward(bn3_out, w->conv4_w, w->conv4_b, conv4_out, 8, 8, 64, 64, 3);
+        conv2d_forward_s(bn3_out, w->conv4_w, w->conv4_b, conv4_out, CONV4_SHAPE);
         batch_norm_forward_relu(conv4_out, w->bn4_gamma, w->bn4_beta, bn4_out, NULL, NULL, NULL, w->bn4_mean, w->bn4_var, 64, 8, 8, 0);
         
         // Store flattened + player for batch FC
@@ -277,19 +277,19 @@ void cnn_forward_sample(const CNNWeights *w, const TrainingSample *sample, CNNOu
     float fc_input[4097], policy_out[512], value_h[256];
 
     // Layer 1 (Fused BN+ReLU)
-    conv2d_forward(input, w->conv1_w, w->conv1_b, conv1_out, 8, 8, CNN_INPUT_CHANNELS, 64, 3);
+    conv2d_forward_s(input, w->conv1_w, w->conv1_b, conv1_out, CONV1_SHAPE);
     batch_norm_forward_relu(conv1_out, w->bn1_gamma, w->bn1_beta, bn1_out, NULL, NULL, NULL, w->bn1_mean, w->bn1_var, 64, 8, 8, 0);
 
     // Layer 2
-    conv2d_forward(bn1_out, w->conv2_w, w->conv2_b, conv2_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn1_out, w->conv2_w, w->conv2_b, conv2_out, CONV2_SHAPE);
     batch_norm_forward_relu(conv2_out, w->bn2_gamma, w->bn2_beta, bn2_out, NULL, NULL, NULL, w->bn2_mean, w->bn2_var, 64, 8, 8, 0);
 
     // Layer 3
-    conv2d_forward(bn2_out, w->conv3_w, w->conv3_b, conv3_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn2_out, w->conv3_w, w->conv3_b, conv3_out, CONV3_SHAPE);
     batch_norm_forward_relu(conv3_out, w->bn3_gamma, w->bn3_beta, bn3_out, NULL, NULL, NULL, w->bn3_mean, w->bn3_var, 64, 8, 8, 0);
 
     // Layer 4
-    conv2d_forward(bn3_out, w->conv4_w, w->conv4_b, conv4_out, 8, 8, 64, 64, 3);
+    conv2d_forward_s(bn3_out, w->conv4_w, w->conv4_b, conv4_out, CONV4_SHAPE);
     batch_norm_forward_relu(conv4_out, w->bn4_gamma, w->bn4_beta, bn4_out, NULL, NULL, NULL, w->bn4_mean, w->bn4_var, 64, 8, 8, 0);
 
     // Flatten + Player

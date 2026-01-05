@@ -11,6 +11,7 @@
 #include "dama/training/dataset.h"
 #include "dama/neural/cnn.h"
 #include "dama/engine/game.h"
+#include "dama/engine/zobrist.h"
 #include "dama/engine/movegen.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -22,7 +22,8 @@
 // Include project headers
 #include "dama/engine/game.h"
 #include "dama/engine/movegen.h"
-#include "dama/engine/endgame.h"
+#include "dama/engine/zobrist.h"
+#include "dama/training/endgame.h"
 #include "dama/search/mcts.h"
 #include "dama/search/mcts_types.h"
 #include "dama/neural/cnn.h"

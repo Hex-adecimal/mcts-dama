@@ -8,7 +8,7 @@
 #include "dama/engine/movegen.h"
 #include "dama/neural/cnn.h"
 #include "dama/training/dataset.h"
-#include "dama/engine/endgame.h"
+#include "dama/training/endgame.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,7 +72,7 @@ static void add_dirichlet_noise(Node *root, RNG *rng, float eps, float alpha) {
     free(noise);
 }
 
-static int game_over(const GameState *s) {
+static int is_game_over(const GameState *s) {
     MoveList m;
     movegen_generate(s, &m);
     return m.count == 0;
@@ -83,6 +83,50 @@ static int game_over(const GameState *s) {
 // =============================================================================
 // GAME PLAY LOOP
 // =============================================================================
+
+/**
+ * Select move using temperature-based sampling.
+ * Low temp (<0.1): greedy (select most visited)
+ * High temp: sample proportionally to visit^(1/temp)
+ */
+static Move select_move_by_temperature(Node *root, float temp, RNG *rng) {
+    Move chosen = {0};
+    
+    if (temp < 0.1f) {
+        // Greedy: select most visited child
+        int best_idx = 0;
+        int max_visit = -1;
+        for (int i = 0; i < root->num_children; i++) {
+            if (root->children[i]->visits > max_visit) {
+                max_visit = root->children[i]->visits;
+                best_idx = i;
+            }
+        }
+        chosen = root->children[best_idx]->move_from_parent;
+    } else {
+        // Sample proportionally to visit counts
+        double exp_t = 1.0 / temp;
+        double sum = 0;
+        for (int i = 0; i < root->num_children; i++) {
+            sum += pow(root->children[i]->visits, exp_t);
+        }
+        
+        double threshold = rng_f32(rng) * sum;
+        double current = 0;
+        for (int i = 0; i < root->num_children; i++) {
+            current += pow(root->children[i]->visits, exp_t);
+            if (current >= threshold) {
+                chosen = root->children[i]->move_from_parent;
+                break;
+            }
+        }
+        if (chosen.path[0] == 0) {
+            chosen = root->children[0]->move_from_parent;
+        }
+    }
+    
+    return chosen;
+}
 
 /**
  * Play a single self-play game.
@@ -132,7 +176,7 @@ static int play_game(
     int max_moves = 200;
     float policy[CNN_POLICY_SIZE];
     
-    while (!game_over(&state) && moves < max_moves) {
+    while (!is_game_over(&state) && moves < max_moves) {
         float temp = (moves < DEFAULT_TEMP_THRESHOLD) ? initial_temp : 0.1f;
         
         MCTSConfig cfg = (state.current_player == WHITE) ? cfg_white : cfg_black;
@@ -156,38 +200,8 @@ static int play_game(
         mcts_search(root, &arena, 0.0, cfg, NULL, NULL); // Time 0.0 -> use max_nodes or implicit
         mcts_get_policy(root, policy, temp, &state);
         
-        // Select move based on temperature
-        Move chosen = {0};
-        double r_val = rng_f32(rng);
-        int best_child = 0;
-        double max_visit = -1;
-        
-        if (temp < 0.1f) {
-            // Low temp: select most visited child (greedy)
-            for (int i=0; i<root->num_children; i++) {
-                if (root->children[i]->visits > max_visit) {
-                    max_visit = root->children[i]->visits;
-                    best_child = i;
-                }
-            }
-            chosen = root->children[best_child]->move_from_parent;
-        } else {
-            // High temp: sample proportionally to visit counts
-             double sum = 0;
-             double exp_t = 1.0/temp;
-             for(int i=0; i<root->num_children; i++) sum += pow(root->children[i]->visits, exp_t);
-             
-             double threshold = r_val * sum;
-             double current = 0;
-             for(int i=0; i<root->num_children; i++) {
-                 current += pow(root->children[i]->visits, exp_t);
-                 if (current >= threshold) {
-                     chosen = root->children[i]->move_from_parent;
-                     break;
-                 }
-             }
-             if (chosen.path[0] == 0) chosen = root->children[0]->move_from_parent;
-        }
+        // Select move using temperature-based sampling
+        Move chosen = select_move_by_temperature(root, temp, rng);
         
         // Record
         history_buffer[moves].state = state;

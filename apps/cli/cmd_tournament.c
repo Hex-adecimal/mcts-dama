@@ -6,6 +6,7 @@
 #include "dama/common/cli_view.h"
 #include "dama/tournament/tournament.h"
 #include "dama/engine/movegen.h"
+#include "dama/engine/zobrist.h"
 #include "dama/neural/cnn.h"
 #include <stdio.h>
 #include <stdlib.h>

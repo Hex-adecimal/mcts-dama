@@ -5,12 +5,25 @@
  * Positions are balanced to avoid trivially won/lost games.
  */
 
-#include "dama/engine/endgame.h"
+#include "dama/training/endgame.h"
+#include "dama/engine/zobrist.h"
 #include <string.h>
 
 // =============================================================================
 // HELPERS
 // =============================================================================
+
+// Squares where pieces can be placed: (row + col) % 2 == 1
+const int DARK_SQUARES[] = {
+    1, 3, 5, 7,      // row 0
+    8, 10, 12, 14,   // row 1
+    17, 19, 21, 23,  // row 2
+    24, 26, 28, 30,  // row 3
+    33, 35, 37, 39,  // row 4
+    40, 42, 44, 46,  // row 5
+    49, 51, 53, 55,  // row 6
+    56, 58, 60, 62   // row 7
+};
 
 // Shuffle array of dark square indices using Fisher-Yates
 static void shuffle_squares(int *arr, int n, RNG *rng) {
@@ -28,25 +41,6 @@ static int is_promotion_zone(int sq, Color color) {
     return (color == WHITE && row == 7) || (color == BLACK && row == 0);
 }
 
-// Compute hash for the state (reusing logic from game.c)
-static uint64_t compute_hash_for_endgame(const GameState *s) {
-    extern uint64_t zobrist_keys[NUM_COLORS][NUM_PIECE_TYPES][NUM_SQUARES];
-    extern uint64_t zobrist_black_move;
-    
-    uint64_t h = 0;
-    for (Color c = WHITE; c <= BLACK; c++) {
-        for (Piece t = PAWN; t <= LADY; t++) {
-            Bitboard bb = s->piece[c][t];
-            while (bb) {
-                int sq = __builtin_ctzll(bb);
-                h ^= zobrist_keys[c][t][sq];
-                POP_LSB(bb);
-            }
-        }
-    }
-    if (s->current_player == BLACK) h ^= zobrist_black_move;
-    return h;
-}
 
 // Place a piece on the board
 static void place_piece(GameState *s, Color c, Piece t, int sq) {
@@ -116,7 +110,7 @@ static int setup_endgame_with_counts(
     }
     
     // Compute hash
-    state->hash = compute_hash_for_endgame(state);
+    state->hash = zobrist_compute_hash(state);
     
     // Validate: current player must have legal moves
     return position_has_moves(state);

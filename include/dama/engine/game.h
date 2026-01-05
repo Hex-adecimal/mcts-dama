@@ -1,5 +1,6 @@
 /**
- * game.h - Core Game Types and State for Italian Checkers
+ * @file game.h
+ * @brief Core Game Types and State for Italian Checkers.
  */
 
 #ifndef GAME_H
@@ -109,16 +110,20 @@ static inline int check_bit(const Bitboard bb, const int sq) {
 }
 
 // --- Public API ---
-void zobrist_init(void);
-extern uint64_t zobrist_keys[NUM_COLORS][NUM_PIECE_TYPES][NUM_SQUARES];
-extern uint64_t zobrist_black_move;
 
+/**
+ * @brief Initialize the game state to the starting position.
+ *
+ * @param state Pointer to the GameState structure to initialize.
+ */
 void init_game(GameState *state);
-void apply_move(GameState *state, const Move *move);
 
-void print_board(const GameState *state);
-void print_coords(int square_idx);
-void print_move_list(const MoveList *list);
-void print_move_description(Move m);
+/**
+ * @brief Apply a move to the game state.
+ *
+ * @param state Pointer to the current GameState.
+ * @param move Pointer to the Move to apply.
+ */
+void apply_move(GameState *state, const Move *move);
 
 #endif /* GAME_H */

@@ -1,5 +1,7 @@
 /**
- * movegen.c - Move Generation for Italian Checkers
+ * @file movegen.c
+ * @brief Move Generation for Italian Checkers.
+ *
  * Uses lookup tables for fast move/capture generation.
  * Implements Italian priority rules for mandatory captures.
  */

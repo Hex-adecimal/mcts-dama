@@ -22,7 +22,7 @@ BIN_DIR = bin
 # =============================================================================
 
 # Engine module (ex core/)
-ENGINE_SRCS = src/engine/game.c src/engine/movegen.c src/engine/endgame.c
+ENGINE_SRCS = src/engine/game.c src/engine/movegen.c src/engine/game_view.c src/engine/zobrist.c
 
 # Common utilities module
 COMMON_SRCS = src/common/cli_view.c
@@ -34,7 +34,7 @@ SEARCH_SRCS = src/search/mcts_search.c src/search/mcts_utils.c src/search/mcts_t
 NEURAL_SRCS = src/neural/cnn_core.c src/neural/cnn_io.c src/neural/cnn_inference.c src/neural/conv_ops.c src/neural/cnn_batch_norm.c src/neural/cnn_encode.c
 
 # Training module (training pipeline, ex part of nn/)
-TRAINING_SRCS = src/training/cnn_training.c src/training/dataset.c src/training/dataset_analysis.c src/training/selfplay.c src/training/training_pipeline.c
+TRAINING_SRCS = src/training/cnn_training.c src/training/dataset.c src/training/dataset_analysis.c src/training/selfplay.c src/training/training_pipeline.c src/training/endgame.c
 
 # Tournament module
 TOURNAMENT_SRCS = src/tournament/tournament.c

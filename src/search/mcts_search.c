@@ -1,7 +1,7 @@
 /**
  * mcts_search.c - MCTS Main Search Algorithm
  * 
- * Contains: mcts_search, mcts_step_sequential, check_early_exit
+ * Contains: mcts_search, mcts_step_sequential, should_exit_early
  * Worker threads are in mcts_worker.c
  */
 
@@ -24,8 +24,8 @@
 double simulate_rollout(Node *node, MCTSConfig config);
 
 // External functions from mcts_utils.c
-extern int get_tree_depth(Node *node);
-extern int get_tree_node_count(Node *node);
+extern int get_tree_depth(const Node *node);
+extern int get_tree_node_count(const Node *node);
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -49,7 +49,7 @@ static int get_game_result(const GameState *state) {
 }
 
 // Early Exit Check: Returns 1 if the best move cannot be overtaken
-static int check_early_exit(Node *root, int max_nodes) {
+static int should_exit_early(Node *root, int max_nodes) {
     if (!root || root->num_children < 2) return 0;
     
     int best_visits = -1;
@@ -202,6 +202,167 @@ static void mcts_step_sequential(Node *root, Arena *arena, MCTSConfig config) {
 }
 
 // =============================================================================
+// THREAD POOL HELPERS
+// =============================================================================
+
+// Initialize inference queue for batch CNN processing
+static void mcts_init_queue(InferenceQueue *queue) {
+    queue->count = 0;
+    queue->shutdown = 0;
+    pthread_mutex_init(&queue->lock, NULL);
+    pthread_cond_init(&queue->cond_batch_ready, NULL);
+}
+
+// Cleanup inference queue
+static void mcts_destroy_queue(InferenceQueue *queue) {
+    pthread_mutex_destroy(&queue->lock);
+    pthread_cond_destroy(&queue->cond_batch_ready);
+}
+
+// Spawn worker threads for parallel MCTS iterations
+static MCTSStats* mcts_spawn_workers(
+    pthread_t *workers, WorkerArgs *args, int num_threads,
+    Node *root, Arena *arena, MCTSConfig config, InferenceQueue *queue
+) {
+    MCTSStats *worker_stats = calloc(num_threads, sizeof(MCTSStats));
+    if (!worker_stats) return NULL;
+    
+    for (int i = 0; i < num_threads; i++) {
+        args[i].root = root;
+        args[i].arena = arena;
+        args[i].config = config;
+        args[i].queue = queue;
+        args[i].thread_id = i;
+        args[i].local_stats = &worker_stats[i];
+        pthread_create(&workers[i], NULL, mcts_worker, &args[i]);
+    }
+    return worker_stats;
+}
+
+// Signal shutdown and join all worker threads
+static void mcts_shutdown_workers(
+    pthread_t *workers, int num_threads,
+    InferenceQueue *queue,
+    MCTSStats *worker_stats,
+    long *out_iterations, long *out_expansions, long *out_children
+) {
+    queue->shutdown = 1;
+    pthread_cond_broadcast(&queue->cond_batch_ready);
+    
+    // Wake up any waiting workers
+    pthread_mutex_lock(&queue->lock);
+    for (int i = 0; i < queue->count; i++) {
+        pthread_cond_signal(&queue->requests[i]->cond);
+    }
+    pthread_mutex_unlock(&queue->lock);
+    
+    // Join and aggregate stats
+    long iter = 0, exp = 0, child = 0;
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(workers[i], NULL);
+        iter += worker_stats[i].total_iterations;
+        exp += worker_stats[i].total_expansions;
+        child += worker_stats[i].total_policy_cached;
+    }
+    
+    *out_iterations = iter;
+    *out_expansions = exp;
+    *out_children = child;
+    free(worker_stats);
+}
+
+// Process a batch of CNN inference requests
+static void mcts_process_cnn_batch(InferenceQueue *queue, const CNNWeights *weights) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += 1000000; // 1ms timeout
+    if (ts.tv_nsec >= 1000000000) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= 1000000000;
+    }
+    
+    pthread_mutex_lock(&queue->lock);
+    
+    // Wait for requests or timeout
+    while (queue->count < 1 && !queue->shutdown) {
+        pthread_cond_timedwait(&queue->cond_batch_ready, &queue->lock, &ts);
+        if (queue->count > 0) break;
+        
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+        if (now.tv_sec > ts.tv_sec || (now.tv_sec == ts.tv_sec && now.tv_nsec >= ts.tv_nsec)) break;
+    }
+    
+    if (queue->shutdown || queue->count == 0) {
+        pthread_mutex_unlock(&queue->lock);
+        return;
+    }
+    
+    int current_batch = queue->count;
+    
+    // Batch arrays (stack allocated, limited by MCTS_BATCH_SIZE)
+    CNNOutput outputs[MCTS_BATCH_SIZE];
+    const GameState *states[MCTS_BATCH_SIZE];
+    const GameState *hist1s[MCTS_BATCH_SIZE];
+    const GameState *hist2s[MCTS_BATCH_SIZE];
+    
+    for (int i = 0; i < current_batch; i++) {
+        Node *n = queue->requests[i]->node;
+        states[i] = &n->state;
+        hist1s[i] = (n->parent) ? &n->parent->state : NULL;
+        hist2s[i] = (n->parent && n->parent->parent) ? &n->parent->parent->state : NULL;
+    }
+    
+    cnn_forward_batch(weights, states, hist1s, hist2s, outputs, current_batch);
+    
+    // Distribute results to waiting threads
+    for (int i = 0; i < current_batch; i++) {
+        InferenceRequest *req = queue->requests[i];
+        memcpy(req->policy_out, outputs[i].policy, CNN_POLICY_SIZE * sizeof(float));
+        *req->value_out = (outputs[i].value + 1.0f) / 2.0f;
+        req->ready = 1;
+        pthread_cond_signal(&req->cond);
+    }
+    
+    queue->count = 0;
+    pthread_mutex_unlock(&queue->lock);
+}
+
+// Select the most visited child node (Robust Child selection)
+static Node* mcts_select_best_child(Node *root) {
+    Node *best = NULL;
+    int max_visits = -1;
+    
+    for (int i = 0; i < root->num_children; i++) {
+        int v = atomic_load(&root->children[i]->visits);
+        if (v > max_visits) {
+            max_visits = v;
+            best = root->children[i];
+        }
+    }
+    return best;
+}
+
+// Update MCTSStats with results from this search
+static void mcts_update_stats(
+    MCTSStats *stats, Node *root, 
+    long iterations, long expansions, long children,
+    double elapsed_time, size_t memory_used, int depth
+) {
+    if (!stats) return;
+    
+    stats->total_iterations += iterations;
+    stats->total_nodes += get_tree_node_count(root);
+    stats->current_move_iterations = iterations;
+    stats->total_moves++;
+    stats->total_depth += depth;
+    stats->total_time += elapsed_time;
+    stats->total_memory += memory_used;
+    stats->total_expansions += expansions;
+    stats->total_policy_cached += children;
+}
+
+// =============================================================================
 // MAIN MCTS SEARCH FUNCTION
 // =============================================================================
 
@@ -214,10 +375,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     
     // 0. Setup Queue
     InferenceQueue queue;
-    queue.count = 0;
-    queue.shutdown = 0;
-    pthread_mutex_init(&queue.lock, NULL);
-    pthread_cond_init(&queue.cond_batch_ready, NULL);
+    mcts_init_queue(&queue);
     
     // 1. Spawn Workers (if NUM_MCTS_THREADS > 0)
     pthread_t workers[NUM_MCTS_THREADS > 0 ? NUM_MCTS_THREADS : 1];
@@ -225,20 +383,11 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     MCTSStats *worker_stats_arr = NULL;
 
     if (NUM_MCTS_THREADS > 0) {
-        worker_stats_arr = calloc(NUM_MCTS_THREADS, sizeof(MCTSStats));
-        for (int i=0; i<NUM_MCTS_THREADS; i++) {
-            args[i].root = root;
-            args[i].arena = arena;
-            args[i].config = config;
-            args[i].queue = &queue;
-            args[i].thread_id = i;
-            args[i].local_stats = &worker_stats_arr[i];
-            pthread_create(&workers[i], NULL, mcts_worker, &args[i]);
-        }
+        worker_stats_arr = mcts_spawn_workers(workers, args, NUM_MCTS_THREADS,
+                                               root, arena, config, &queue);
     }
     
     // 2. Main Loop
-    struct timespec ts;
     if (config.verbose) {
         printf("MCTS Start: Root=%p\n", root);
     }
@@ -256,7 +405,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
 
         // Early Exit Check (every EARLY_EXIT_CHECK_INTERVAL nodes to save CPU)
         if (visits > EARLY_EXIT_MIN_VISITS && visits % EARLY_EXIT_CHECK_INTERVAL == 0) {
-            if (check_early_exit(root, config.max_nodes)) {
+            if (should_exit_early(root, config.max_nodes)) {
                 break;
             }
         }
@@ -271,63 +420,9 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
             continue;
         }
 
-        // CNN Batch Processing
-        pthread_mutex_lock(&queue.lock);
-        
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_nsec += 1000000; // 1ms
-        if (ts.tv_nsec >= 1000000000) {
-            ts.tv_sec += 1;
-            ts.tv_nsec -= 1000000000;
-        }
-        
-        while (queue.count < 1 && !queue.shutdown) {
-             pthread_cond_timedwait(&queue.cond_batch_ready, &queue.lock, &ts);
-             if (queue.count > 0) break;
-             
-             struct timespec now;
-             clock_gettime(CLOCK_REALTIME, &now);
-             if (now.tv_sec > ts.tv_sec || (now.tv_sec == ts.tv_sec && now.tv_nsec >= ts.tv_nsec)) break;
-        }
-        
-        if (queue.shutdown) {
-            pthread_mutex_unlock(&queue.lock);
-            break;
-        }
-        
-        if (queue.count == 0) {
-            pthread_mutex_unlock(&queue.lock);
-            continue; 
-        }
-
-        // --- PROCESS BATCH ---
-        int current_batch = queue.count;
-        
-        // Local arrays for batch processing (stack allocated)
-        CNNOutput outputs[MCTS_BATCH_SIZE];
-        const GameState *states[MCTS_BATCH_SIZE];
-        const GameState *hist1s[MCTS_BATCH_SIZE];
-        const GameState *hist2s[MCTS_BATCH_SIZE];
-        
-        for (int i=0; i<current_batch; i++) {
-             Node *n = queue.requests[i]->node;
-             states[i] = &n->state;
-             hist1s[i] = (n->parent) ? &n->parent->state : NULL;
-             hist2s[i] = (n->parent && n->parent->parent) ? &n->parent->parent->state : NULL;
-        }
-        
-        cnn_forward_batch(config.cnn_weights, states, hist1s, hist2s, outputs, current_batch);
-        
-        for (int i=0; i<current_batch; i++) {
-            InferenceRequest *req = queue.requests[i];
-            memcpy(req->policy_out, outputs[i].policy, CNN_POLICY_SIZE * sizeof(float));
-            *req->value_out = (outputs[i].value + 1.0f) / 2.0f;
-            req->ready = 1;
-            pthread_cond_signal(&req->cond);
-        }
-        
-        queue.count = 0;
-        pthread_mutex_unlock(&queue.lock);
+        // Process CNN batch requests
+        mcts_process_cnn_batch(&queue, config.cnn_weights);
+        if (queue.shutdown) break;
     }
     
     // 3. Cleanup & Join
@@ -335,29 +430,14 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     long expansions_this_move = 0;
     long children_this_move = 0;
 
-    queue.shutdown = 1;
-    pthread_cond_broadcast(&queue.cond_batch_ready);
-    
     if (NUM_MCTS_THREADS > 0) {
-        pthread_mutex_lock(&queue.lock);
-        for(int i=0; i<queue.count; i++) {
-            pthread_cond_signal(&queue.requests[i]->cond);
-        }
-        pthread_mutex_unlock(&queue.lock);
-
-        for (int i=0; i<NUM_MCTS_THREADS; i++) {
-            pthread_join(workers[i], NULL);
-            iter_this_move += worker_stats_arr[i].total_iterations;
-            expansions_this_move += worker_stats_arr[i].total_expansions;
-            children_this_move += worker_stats_arr[i].total_policy_cached;
-        }
-        free(worker_stats_arr);
+        mcts_shutdown_workers(workers, NUM_MCTS_THREADS, &queue, worker_stats_arr,
+                              &iter_this_move, &expansions_this_move, &children_this_move);
     } else {
         iter_this_move = root->visits;
     }
     
-    pthread_mutex_destroy(&queue.lock);
-    pthread_cond_destroy(&queue.cond_batch_ready);
+    mcts_destroy_queue(&queue);
 
     clock_gettime(CLOCK_MONOTONIC, &current_ts);
     double elapsed_time = (current_ts.tv_sec - start_ts.tv_sec) + 
@@ -365,18 +445,8 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     int depth = get_tree_depth(root);
     size_t memory_used = arena->offset;
     
-    if (stats) {
-        stats->total_iterations += iter_this_move;
-        stats->total_nodes += get_tree_node_count(root);
-        stats->current_move_iterations = iter_this_move;
-        
-        stats->total_moves++;
-        stats->total_depth += depth;
-        stats->total_time += elapsed_time;
-        stats->total_memory += memory_used;
-        stats->total_expansions += expansions_this_move;
-        stats->total_policy_cached += children_this_move;
-    }
+    mcts_update_stats(stats, root, iter_this_move, expansions_this_move, 
+                      children_this_move, elapsed_time, memory_used, depth);
 
     if (config.verbose) {
         printf("[MCTS Async] Tree depth: %d. Time: %.3fs. Memory: %.1f KB\n", 
@@ -384,16 +454,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     }
 
     // Select best move (Robust Child: most visited)
-    Node *best_child = NULL;
-    int max_visits = -1;
-
-    for (int i = 0; i < root->num_children; i++) {
-        int v = atomic_load(&root->children[i]->visits);
-        if (v > max_visits) {
-            max_visits = v;
-            best_child = root->children[i];
-        }
-    }
+    Node *best_child = mcts_select_best_child(root);
 
     if (best_child == NULL) {
         Move empty = {0};

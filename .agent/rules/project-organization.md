@@ -5,7 +5,7 @@ description: When creating new files, reorganizing code, or deciding where to pu
 
 # Project Organization
 
-## File Size Balance
+## File Size Guidelines
 
 | Type | Target Lines | Action if Exceeds |
 |------|--------------|-------------------|
@@ -21,15 +21,31 @@ description: When creating new files, reorganizing code, or deciding where to pu
 
 ---
 
-## Folder Structure
+## Current Folder Structure
 
 ```
 src/
-├── core/           # Game logic (game, movegen)
-├── mcts/           # MCTS: tree, selection, rollout
-├── nn/             # Neural network: model, training, inference
-├── debug/          # Print/debug functions only
-└── params.h        # Global parameters
+├── engine/         # Game logic (game.c, movegen.c, endgame.c)
+├── search/         # MCTS (mcts_search.c, mcts_tree.c, mcts_selection.c, etc.)
+├── neural/         # CNN (cnn_core.c, cnn_inference.c, conv_ops.c, etc.)
+├── training/       # Training (cnn_training.c, selfplay.c, dataset.c)
+├── tournament/     # Tournament runner
+├── tuning/         # CLOP hyperparameter tuning
+└── common/         # Shared utilities (cli_view.c)
+
+include/dama/
+├── engine/         # Engine headers
+├── search/         # MCTS headers (mcts.h, mcts_types.h)
+├── neural/         # CNN headers (cnn.h, conv_ops.h)
+├── training/       # Training headers
+├── tournament/     # Tournament headers
+├── tuning/         # Tuning headers
+└── common/         # Shared headers (params.h, error_codes.h, debug.h, rng.h)
+
+apps/cli/           # CLI application
+tests/              # Unit tests and benchmarks
+scripts/            # Shell scripts (train_loop.sh)
+docs/               # Documentation
 ```
 
 ---
@@ -44,14 +60,14 @@ out/
 └── results/        # Final results (ELO, stats)
 ```
 
-### Naming
-- Models: `{type}_v{N}.bin` (e.g., `cnn_v3.bin`)
-- Datasets: `{source}_{YYYYMMDD}.dat`
+### Naming Conventions
+- Models: `cnn_v{N}.bin` (e.g., `cnn_v3.bin`)
+- Datasets: `selfplay_{YYYYMMDD}.dat`
 - Logs: `{type}_{YYYYMMDD_HHMM}.log`
 
 ---
 
-## Anti-Patterns to Avoid
+## Anti-Patterns
 - ❌ Files >800 lines
 - ❌ Print functions scattered in logic files
 - ❌ Data saved in root or random folders

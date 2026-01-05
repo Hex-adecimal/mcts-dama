@@ -18,6 +18,7 @@
 #include "dama/search/mcts.h"
 #include "dama/search/mcts_config.h"
 #include "dama/engine/game.h"
+#include "dama/engine/zobrist.h"
 #include "dama/engine/movegen.h"
 #include "dama/common/logging.h"
 #include <stdio.h>

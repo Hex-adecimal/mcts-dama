@@ -5,7 +5,7 @@
  */
 
 // Note: Includes are in test_main.c
-
+#include "dama/engine/zobrist.h"
 #include <sys/stat.h>
 #include <unistd.h>
 

@@ -10,6 +10,7 @@
 #include "dama/training/selfplay.h"
 #include "dama/training/training_pipeline.h"
 #include "dama/engine/movegen.h"
+#include "dama/engine/zobrist.h"
 #include "dama/common/params.h"
 #include <stdio.h>
 #include <stdlib.h>
