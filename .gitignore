@@ -34,5 +34,5 @@ logs/
 training_log.txt
 out/
 
-# Keep agent rules
-!.agent/
+# Agent configuration (local only)
+.agent/

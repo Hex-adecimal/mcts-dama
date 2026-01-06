@@ -57,10 +57,11 @@ For detailed information on the data pipeline, see [docs/architecture.md](docs/a
 ```
 MCTS Dama/
 ├── src/                      # Source code
-│   ├── engine/               # Game logic (3 files)
+│   ├── engine/               # Game logic (4 files)
 │   │   ├── game.c            # State management, game_apply_move
 │   │   ├── movegen.c         # Move generation with lookup tables
-│   │   └── endgame.c         # Endgame position generator
+│   │   ├── zobrist.c         # Zobrist hashing for transposition tables
+│   │   └── game_view.c       # Board display formatting
 │   │
 │   ├── common/               # Shared utilities
 │   │   └── cli_view.c        # Formatted CLI output
@@ -81,27 +82,28 @@ MCTS Dama/
 │   │   ├── conv_ops.c        # im2col + sgemm convolutions
 │   │   └── cnn_io.c          # Weight save/load
 │   │
-│   ├── training/             # Training pipeline (5 files, ~1,400 lines)
+│   ├── training/             # Training pipeline (6 files, ~1,600 lines)
 │   │   ├── cnn_training.c    # Backward pass, SGD optimizer
 │   │   ├── selfplay.c        # Self-play data generation
 │   │   ├── training_pipeline.c # Epoch loop, LR scheduling
 │   │   ├── dataset.c         # Binary dataset I/O
-│   │   └── dataset_analysis.c # Dataset statistics
+│   │   ├── dataset_analysis.c # Dataset statistics
+│   │   └── endgame.c         # Endgame position generator
 │   │
 │   ├── tournament/           # Tournament system
 │   │   └── tournament.c      # Round-robin, ELO calculation
 │   │
-│   └── tuning/               # Hyperparameter tuning (stub)
-│       └── clop.c            # CLOP algorithm (not implemented)
+│   └── tuning/               # Hyperparameter tuning
+│       └── clop.c            # CLOP algorithm for tuning
 │
 ├── include/dama/             # Header files
-│   ├── common/               # cli_view, RNG, logging, params
-│   ├── engine/               # game.h, movegen.h, endgame.h
+│   ├── common/               # cli_view, debug, error_codes, logging, params, rng
+│   ├── engine/               # game.h, movegen.h, zobrist.h, game_view.h
 │   ├── neural/               # cnn.h, cnn_types.h, conv_ops.h
 │   ├── search/               # mcts.h, mcts_config.h, mcts_types.h
 │   ├── tournament/           # tournament.h
 │   ├── training/             # dataset.h, selfplay.h
-│   └── tuning/               # clop.h
+│   └── tuning/               # clop.h, clop_params.h
 │
 ├── apps/                     # Applications
 │   ├── cli/                  # Command-line interface
@@ -113,8 +115,8 @@ MCTS Dama/
 │   └── gui/                  # SDL2 graphical interface
 │       └── dama_gui.c        # Board rendering, click handling
 │
-├── tests/                    # Unit tests (79 tests)
-├── docs/                     # Documentation
+├── tests/                    # Unit tests (7 test files)
+├── docs/                     # Technical documentation (9 docs)
 ├── scripts/                  # Automation scripts
 └── out/                      # Output (data, models, logs)
 ```
