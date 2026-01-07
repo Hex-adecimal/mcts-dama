@@ -21,6 +21,7 @@
 #include "dama/engine/zobrist.h"
 #include "dama/training/endgame.h"
 #include "dama/search/mcts.h"
+#include "dama/search/mcts_tree_stats.h"
 #include "dama/neural/cnn.h"
 #include "dama/training/dataset.h"
 #include "dama/common/rng.h"
@@ -39,26 +40,26 @@ static double get_time_ms(void) {
 static void print_result(const char *name, int iterations, double total_ms) {
     double ops_per_sec = iterations / (total_ms / 1000.0);
     double avg_us = (total_ms * 1000.0) / iterations;
-    printf("║ %-35s │ %10.0f │ %12.2f │ %8d ║\n", name, ops_per_sec, avg_us, iterations);
+    printf("║ %-36s │ %12.0f │ %14.2f │ %10d║\n", name, ops_per_sec, avg_us, iterations);
 }
 
 static void print_header(void) {
     printf("\n");
-    printf("╔════════════════════════════════════════════════════════════════════════╗\n");
-    printf("║                        BENCHMARK RESULTS                               ║\n");
-    printf("╠════════════════════════════════════════════════════════════════════════╣\n");
-    printf("║ %-35s │ %10s │ %12s │ %8s ║\n", "Benchmark", "Ops/sec", "Avg (μs)", "Iters");
-    printf("╠════════════════════════════════════════════════════════════════════════╣\n");
+    printf("╔══════════════════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                              BENCHMARK RESULTS                                   ║\n");
+    printf("╠══════════════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║ %-36s │ %12s │ %14s │ %10s ║\n", "Benchmark", "Ops/sec", "Avg (μs)", "Iters");
+    printf("╠══════════════════════════════════════════════════════════════════════════════════╣\n");
 }
 
 static void print_section(const char *name) {
-    printf("╠────────────────────────────────────────────────────────────────────────╣\n");
-    printf("║ %-70s ║\n", name);
-    printf("╠════════════════════════════════════════════════════════════════════════╣\n");
+    printf("╠──────────────────────────────────────────────────────────────────────────────────╣\n");
+    printf("║ %-81s║\n", name);
+    printf("╠══════════════════════════════════════════════════════════════════════════════════╣\n");
 }
 
 static void print_footer(void) {
-    printf("╚════════════════════════════════════════════════════════════════════════╝\n\n");
+    printf("╚══════════════════════════════════════════════════════════════════════════════════╝\n\n");
 }
 
 #define TARGET_TIME_MS 1000.0
@@ -301,7 +302,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_VANILLA);
             config.max_nodes = 100;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -320,7 +321,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_VANILLA);
             config.max_nodes = 500;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -339,7 +340,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
             config.max_nodes = 100;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
             arena_free(&arena);
             iter++;
         }

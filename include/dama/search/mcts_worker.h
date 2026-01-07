@@ -48,6 +48,7 @@ typedef struct {
     MCTSConfig config;
     InferenceQueue *queue;
     int thread_id;
+    TranspositionTable *tt;
     MCTSStats *local_stats;
 } WorkerArgs;
 

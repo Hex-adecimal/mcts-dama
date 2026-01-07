@@ -131,6 +131,16 @@ static inline void tt_free(TranspositionTable *tt) {
     }
 }
 
+static inline void tt_reset(TranspositionTable *tt) {
+    if (tt) {
+        pthread_mutex_lock(&tt->lock);
+        memset(tt->buckets, 0, tt->size * sizeof(struct Node*));
+        tt->count = 0;
+        tt->collisions = 0;
+        pthread_mutex_unlock(&tt->lock);
+    }
+}
+
 // =============================================================================
 // SOLVER STATUS
 // =============================================================================
@@ -194,6 +204,14 @@ static inline void tt_insert(TranspositionTable *tt, Node *node) {
     size_t idx = node->state.hash & tt->mask;
     
     pthread_mutex_lock(&tt->lock);
+    Node *existing = tt->buckets[idx];
+    
+    // Quality-based replacement: only replace if new node has more visits
+    if (existing && atomic_load(&existing->visits) > atomic_load(&node->visits)) {
+        pthread_mutex_unlock(&tt->lock);
+        return;  // Keep existing higher-quality entry
+    }
+    
     if (tt->buckets[idx] != NULL) tt->collisions++;
     tt->buckets[idx] = node;
     tt->count++;

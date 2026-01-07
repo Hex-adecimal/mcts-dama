@@ -236,7 +236,7 @@ void ai_move() {
     
     Node *new_root = NULL;
 
-    Move best_move = mcts_search(root, &mcts_arena, TIME_HIGH, active_config, NULL, &new_root);
+    Move best_move = mcts_search(root, &mcts_arena, TIME_HIGH, active_config, NULL, &new_root, NULL);
     
     if (best_move.path[0] == 0 && best_move.path[1] == 0 && best_move.length == 0) {
         printf("AI Resigns (No valid moves).\n");

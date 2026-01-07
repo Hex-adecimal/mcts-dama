@@ -28,7 +28,7 @@ Node* mcts_create_root_with_history(GameState state, Arena *arena, MCTSConfig co
  * Executes the MCTS search algorithm.
  */
 Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig config,
-                 MCTSStats *stats, Node **out_new_root);
+                 MCTSStats *stats, TranspositionTable *tt, Node **out_new_root);
 
 /**
  * Extracts the policy distribution from root (for training).

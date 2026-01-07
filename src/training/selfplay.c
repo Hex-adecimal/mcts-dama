@@ -197,7 +197,7 @@ static int play_game(
             add_dirichlet_noise(root, rng, DEFAULT_DIRICHLET_EPSILON, DEFAULT_DIRICHLET_ALPHA);
         }
         
-        mcts_search(root, &arena, 0.0, cfg, NULL, NULL); // Time 0.0 -> use max_nodes or implicit
+        mcts_search(root, &arena, 0.0, cfg, NULL, NULL, NULL); // Time 0.0 -> use max_nodes or implicit
         mcts_get_policy(root, policy, temp, &state);
         
         // Select move using temperature-based sampling

@@ -42,6 +42,10 @@ static inline int mcts_get_game_result(const GameState *state) {
 // TERMINAL NODE HANDLING
 // =============================================================================
 
+// Internal helpers
+void backpropagate(Node *node, double result, int use_solver);
+Node* select_promising_node(Node *root, MCTSConfig config);
+double simulate_rollout(Node *node, MCTSConfig config);
 /**
  * Handle a terminal node: compute result and backpropagate.
  * 
@@ -80,6 +84,7 @@ static inline void mcts_handle_terminal(Node *leaf, MCTSConfig config, MCTSStats
 static inline Node* mcts_expand_with_policy(
     Node *leaf, 
     Arena *arena, 
+    TranspositionTable *tt,
     MCTSConfig config, 
     float *policy, 
     MCTSStats *stats
@@ -110,7 +115,22 @@ static inline Node* mcts_expand_with_policy(
                 GameState child_state = leaf->state;
                 apply_move(&child_state, &legal_moves.moves[i]);
                 
-                Node *child = create_node(leaf, legal_moves.moves[i], child_state, arena, config);
+                Node *child = NULL;
+                if (tt) {
+                    child = tt_lookup(tt, &child_state);
+                    if (child) {
+                        if (stats) stats->tt_hits++;
+                    }
+                }
+                
+                if (!child) {
+                    child = create_node(leaf, legal_moves.moves[i], child_state, arena, config);
+                    if (tt) {
+                        tt_insert(tt, child);
+                        if (stats) stats->tt_misses++;
+                    }
+                }
+                
                 child->prior = filtered_policy[i];
                 leaf->children[i] = child;
             }
@@ -146,6 +166,7 @@ static inline Node* mcts_expand_with_policy(
 static inline Node* mcts_expand_vanilla(
     Node *leaf, 
     Arena *arena, 
+    TranspositionTable *tt,
     MCTSConfig config, 
     MCTSStats *stats
 ) {
@@ -153,7 +174,7 @@ static inline Node* mcts_expand_vanilla(
     Node *next = leaf;
     
     if (!leaf->is_terminal) {
-        next = expand_node(leaf, arena, NULL, config);
+        next = expand_node(leaf, arena, tt, config, stats);
         if (stats) {
             stats->total_expansions++;
             stats->total_policy_cached++;

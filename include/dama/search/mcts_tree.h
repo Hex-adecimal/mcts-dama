@@ -42,7 +42,7 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
 /**
  * Expand a node by adding one child for an untried move.
  */
-Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config);
+Node *expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config, MCTSStats *stats);
 
 /**
  * Find a child node by move (for tree reuse).

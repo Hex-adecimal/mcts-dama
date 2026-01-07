@@ -21,7 +21,7 @@ static TournamentPlayer *g_players = NULL;
 
 static void on_start(int total) {
     printf("\nStarting Round-Robin Tournament: %d matches scheduled\n", total);
-    printf("Legend: ips = Iterations/sec (Speed) | nps = Nodes/sec (Search Volume)\n");
+    printf("Legend: ips = Iters/s | nps = Nodes/s | D = Avg Depth | BF = Avg Branching Factor | Eff%% = TT Hit Rate | Mem = Peak Memory\n");
 }
 
 static void on_match_start(int i, int j, const char *n1, const char *n2) {
@@ -44,60 +44,75 @@ static void on_game_complete(const TournamentGameResult *r) {
     if (r->result == 1) winner = n1;
     else if (r->result == -1) winner = n2;
     
-    double dur = r->duration;
-
     printf("  > Game: %-15s vs %-15s -> %s (%d moves, %.2fs)\n", 
-           n1, n2, winner, r->moves, dur);
+           n1, n2, winner, r->moves, r->duration);
            
-    // P1 Stats (with restored KB and Depth)
+    // P1 Stats
     double d1 = r->duration_p1;
     int moves1 = r->s1.total_moves > 0 ? r->s1.total_moves : 1;
-    double kb1 = (double)r->s1.total_memory / moves1 / 1024.0;
     double depth1 = (double)r->s1.total_depth / moves1;
     double ips1 = (d1 > 0.001) ? (double)r->s1.total_iterations / d1 : 0.0;
-    printf("    [%-15s]: %s iters, %s nodes | %.1f KB, D%.1f | %s ips (%.2fs)\n",
+    double nps1 = (d1 > 0.001) ? (double)r->s1.total_nodes / d1 : 0.0;
+    double bf1 = (r->s1.nodes_with_children > 0) ? 
+        (double)r->s1.total_children_expanded / r->s1.nodes_with_children : 0.0;
+    double eff1 = (r->s1.tt_hits + r->s1.tt_misses > 0) ? 
+        (double)r->s1.tt_hits * 100.0 / (r->s1.tt_hits + r->s1.tt_misses) : 0.0;
+    
+    printf("    [%-15s]: %s iters, %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
            n1, format_num(r->s1.total_iterations), format_num(r->s1.total_nodes), 
-           kb1, depth1, format_metric(ips1), d1);
+           depth1, bf1, format_metric(ips1), format_metric(nps1), eff1,
+           format_metric(r->s1.peak_memory_bytes));
 
-    // P2 Stats (with restored KB and Depth)
+    // P2 Stats
     double d2 = r->duration_p2;
     int moves2 = r->s2.total_moves > 0 ? r->s2.total_moves : 1;
-    double kb2 = (double)r->s2.total_memory / moves2 / 1024.0;
     double depth2 = (double)r->s2.total_depth / moves2;
     double ips2 = (d2 > 0.001) ? (double)r->s2.total_iterations / d2 : 0.0;
-    printf("    [%-15s]: %s iters, %s nodes | %.1f KB, D%.1f | %s ips (%.2fs)\n",
+    double nps2 = (d2 > 0.001) ? (double)r->s2.total_nodes / d2 : 0.0;
+    double bf2 = (r->s2.nodes_with_children > 0) ? 
+        (double)r->s2.total_children_expanded / r->s2.nodes_with_children : 0.0;
+    double eff2 = (r->s2.tt_hits + r->s2.tt_misses > 0) ? 
+        (double)r->s2.tt_hits * 100.0 / (r->s2.tt_hits + r->s2.tt_misses) : 0.0;
+    
+    printf("    [%-15s]: %s iters, %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
            n2, format_num(r->s2.total_iterations), format_num(r->s2.total_nodes), 
-           kb2, depth2, format_metric(ips2), d2);
+           depth2, bf2, format_metric(ips2), format_metric(nps2), eff2,
+           format_metric(r->s2.peak_memory_bytes));
 }
 
 static void on_tournament_end(TournamentPlayer *players, int count) {
     // Map to View
     TournamentPlayerStats *stats = malloc(count * sizeof(TournamentPlayerStats));
     
-    // Sort logic is handled by sort before print? No, Tournament view expects sorted or sorts itself?
-    // cli_view logic was just printing.
-    // The previous cmd_tournament logic did sort. 
-    // We should sort here before passing to View.
-    
-    // Sort pointers
+    // Sort logic
     for (int k = 0; k < count; k++) {
         TournamentPlayer *p = &players[k];
-        int total = p->wins + p->losses + p->draws;
-        double wr = (total > 0) ? 100.0 * p->wins / total : 0;
+        double total_games = p->wins + p->losses + p->draws;
+        double wr = (total_games > 0) ? 100.0 * p->wins / total_games : 0;
         
-        // We need to map to stats struct
-        // But we want to sort. 
-        // Let's populate first, then qsort the stats array.
-        stats[k].rank = 0; // Filled after sort
         strncpy(stats[k].name, p->name, 31);
         stats[k].points = p->points;
         stats[k].wins = p->wins;
         stats[k].losses = p->losses;
         stats[k].draws = p->draws;
         stats[k].elo = p->elo;
-        stats[k].avg_iters = (p->total_moves>0) ? p->total_iters/p->total_moves : 0;
-        stats[k].avg_nodes = (p->total_moves>0) ? p->total_nodes/p->total_moves : 0;
         stats[k].win_rate_pct = wr;
+
+        // Cumulative Metrics
+        double dur = (p->total_duration > 0.001) ? p->total_duration : 1.0;
+        
+        stats[k].ips = (double)p->total_iters / dur;
+        stats[k].nps = (double)p->total_nodes / dur;
+        stats[k].avg_depth = (p->total_moves > 0) ? (double)p->total_depth / p->total_moves : 0;
+        
+        // Exact Branching Factor: Children / NodesExpanded
+        stats[k].avg_bf = (p->total_expansions > 0) ? 
+            (double)p->total_children_expanded / p->total_expansions : 0;
+        
+        stats[k].peak_mem_mb = (double)p->peak_memory / (1024.0 * 1024.0);
+        
+        long total_tt = p->tt_hits + p->tt_misses;
+        stats[k].efficiency = (total_tt > 0) ? (double)p->tt_hits / total_tt : 0;
     }
     
     // Bubble sort or qsort stats array
@@ -126,24 +141,65 @@ static void on_tournament_end(TournamentPlayer *players, int count) {
 static int setup_roster(TournamentPlayer *players, CNNWeights *v3, CNNWeights *active, int nodes) {
     int n = 0;
     
-    // 1. CNN-V3 (Benchmark)
+    // 1. Classical Baselines
+    MCTSConfig pure = mcts_get_preset(MCTS_PRESET_PURE_VANILLA);
+    pure.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Pure-Vanilla", .desc="No Lookahead, No Reuse", .config=pure, .elo=1200};
+
+    MCTSConfig vanilla = mcts_get_preset(MCTS_PRESET_VANILLA);
+    vanilla.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Vanilla-Base", .desc="Basic Lookahead+Reuse", .config=vanilla, .elo=1200};
+
+    // 2. CNN-Based Models
     MCTSConfig cnn3 = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
     cnn3.max_nodes = nodes; 
     cnn3.cnn_weights = v3;
-    players[n++] = (TournamentPlayer){.name="CNN-V3", .desc="Benchmark (Stable)", .config=cnn3, .elo=1200};
+    players[n++] = (TournamentPlayer){.name="AlphaZero-V3", .desc="Benchmark CNN (Stable)", .config=cnn3, .elo=1200};
 
-    // 2. Grandmaster (Hybrid with V3)
     MCTSConfig gm = mcts_get_preset(MCTS_PRESET_GRANDMASTER); 
     gm.max_nodes = nodes;
     gm.cnn_weights = v3; 
-    players[n++] = (TournamentPlayer){.name="Grandmaster-V3", .desc="Hybrid Heuristic", .config=gm, .elo=1200};
+    players[n++] = (TournamentPlayer){.name="Grandmaster-V3", .desc="Hybrid Heuristic+CNN", .config=gm, .elo=1200};
     
-    // 3. CNN-New (Active Model)
     MCTSConfig cnn_new = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO); 
     cnn_new.max_nodes = nodes; 
     cnn_new.cnn_weights = active;
-    players[n++] = (TournamentPlayer){.name="CNN-New", .desc="Active Training", .config=cnn_new, .elo=1200};
-    
+    cnn_new.use_tt = 1; // TT active for the contender
+    players[n++] = (TournamentPlayer){.name="AlphaZero-New", .desc="Active Model + TT", .config=cnn_new, .elo=1200};
+
+    // 3. Feature-Specific Variants (Ablation Study)
+    MCTSConfig tt = mcts_get_preset(MCTS_PRESET_TT_ONLY);
+    tt.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="TT-Only", .desc="Vanilla + Transposition", .config=tt, .elo=1200};
+
+    MCTSConfig solver = mcts_get_preset(MCTS_PRESET_SOLVER_ONLY);
+    solver.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Solver-Only", .desc="Checkmate Solver", .config=solver, .elo=1200};
+
+    MCTSConfig tuned = mcts_get_preset(MCTS_PRESET_TUNED_ONLY);
+    tuned.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="UCB1-Tuned", .desc="Variance-Aware Search", .config=tuned, .elo=1200};
+
+    MCTSConfig fpu = mcts_get_preset(MCTS_PRESET_FPU_ONLY);
+    fpu.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="FPU-Only", .desc="First Play Urgency", .config=fpu, .elo=1200};
+
+    MCTSConfig decay = mcts_get_preset(MCTS_PRESET_DECAY_ONLY);
+    decay.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Decay-Only", .desc="Reward Decay Factor", .config=decay, .elo=1200};
+
+    MCTSConfig smart = mcts_get_preset(MCTS_PRESET_SMART_ROLLOUTS);
+    smart.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Smart-Rollouts", .desc="Heuristic Rollouts", .config=smart, .elo=1200};
+
+    MCTSConfig weights = mcts_get_preset(MCTS_PRESET_WEIGHTS_ONLY);
+    weights.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Weights-Only", .desc="Fixed Heuristics", .config=weights, .elo=1200};
+
+    MCTSConfig pb = mcts_get_preset(MCTS_PRESET_PROG_BIAS_ONLY);
+    pb.max_nodes = nodes;
+    players[n++] = (TournamentPlayer){.name="Prog-Bias", .desc="Progressive Bias", .config=pb, .elo=1200};
+
     return n;
 }
 

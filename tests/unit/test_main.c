@@ -86,6 +86,10 @@ static void register_all_tests(void) {
     REGISTER_TEST(search_tt_create_and_free);
     REGISTER_TEST(search_tt_mask_is_power_of_two);
     REGISTER_TEST(search_tree_reuse_preserves_stats);
+    // Advanced tests (NEW)
+    REGISTER_TEST(search_tt_higher_visits_not_replaced);
+    REGISTER_TEST(search_more_nodes_equals_better_or_same_move);
+    REGISTER_TEST(search_parallel_mcts_visits_are_consistent);
     
     // Neural tests
     REGISTER_TEST(neural_cnn_init_allocates_weights);

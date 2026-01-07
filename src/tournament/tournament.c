@@ -78,6 +78,11 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
     arena_init(&arenaA, ARENA_SIZE_TOURNAMENT);
     arena_init(&arenaB, ARENA_SIZE_TOURNAMENT);
     
+    TranspositionTable *ttA = NULL;
+    TranspositionTable *ttB = NULL;
+    if (pA->config.use_tt) ttA = tt_create(TT_SIZE_DEFAULT);
+    if (pB->config.use_tt) ttB = tt_create(TT_SIZE_DEFAULT);
+
     GameState history[2] = {0};
     int moves = 0;
     
@@ -105,9 +110,11 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
         TournamentPlayer *cur = is_a_turn ? pA : pB;
         Arena *arena = is_a_turn ? &arenaA : &arenaB;
         MCTSStats *stats = is_a_turn ? sA : sB;
+        TranspositionTable *tt = is_a_turn ? ttA : ttB;
         
         // Search
         arena_reset(arena); // Reset to clear previous tree
+        if (tt) tt_reset(tt); // Reset TT as well since arena reset makes nodes dangling
         
         // History injection
         Node *history_head = NULL;
@@ -136,7 +143,7 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
         t0 = (double)clock() / CLOCKS_PER_SEC;
         #endif
         
-        Move best = mcts_search(root, arena, time_limit, cur->config, stats, NULL);
+        Move best = mcts_search(root, arena, time_limit, cur->config, stats, tt, NULL);
         
         double t1;
         #ifdef _OPENMP
@@ -157,6 +164,8 @@ static int play_single_game(TournamentPlayer *pA, TournamentPlayer *pB, int a_is
     
     arena_free(&arenaA);
     arena_free(&arenaB);
+    if (ttA) tt_free(ttA);
+    if (ttB) tt_free(ttB);
     
     if (out_game_moves) *out_game_moves = moves;
     if (out_durA) *out_durA = durA;
@@ -215,6 +224,24 @@ void tournament_run(TournamentSystemConfig *cfg) {
                 cfg->players[i].total_nodes += s1.total_nodes;
                 #pragma omp atomic
                 cfg->players[i].total_moves += s1.total_moves;
+                #pragma omp atomic
+                cfg->players[i].total_duration += durA;
+                #pragma omp atomic
+                cfg->players[i].total_depth += s1.total_depth;
+                #pragma omp atomic
+                cfg->players[i].total_expansions += s1.nodes_with_children;
+                #pragma omp atomic
+                cfg->players[i].total_children_expanded += s1.total_children_expanded;
+                #pragma omp atomic
+                cfg->players[i].tt_hits += s1.tt_hits;
+                #pragma omp atomic
+                cfg->players[i].tt_misses += s1.tt_misses;
+                
+                #pragma omp critical
+                {
+                    if (s1.peak_memory_bytes > cfg->players[i].peak_memory)
+                        cfg->players[i].peak_memory = s1.peak_memory_bytes;
+                }
 
                 // Aggregate stats to P2 (j)
                 #pragma omp atomic
@@ -223,6 +250,24 @@ void tournament_run(TournamentSystemConfig *cfg) {
                 cfg->players[j].total_nodes += s2.total_nodes;
                 #pragma omp atomic
                 cfg->players[j].total_moves += s2.total_moves;
+                #pragma omp atomic
+                cfg->players[j].total_duration += durB;
+                #pragma omp atomic
+                cfg->players[j].total_depth += s2.total_depth;
+                #pragma omp atomic
+                cfg->players[j].total_expansions += s2.nodes_with_children;
+                #pragma omp atomic
+                cfg->players[j].total_children_expanded += s2.total_children_expanded;
+                #pragma omp atomic
+                cfg->players[j].tt_hits += s2.tt_hits;
+                #pragma omp atomic
+                cfg->players[j].tt_misses += s2.tt_misses;
+
+                #pragma omp critical
+                {
+                    if (s2.peak_memory_bytes > cfg->players[j].peak_memory)
+                        cfg->players[j].peak_memory = s2.peak_memory_bytes;
+                }
                 
                 if (cfg->on_game_complete) {
                     TournamentGameResult gr = {

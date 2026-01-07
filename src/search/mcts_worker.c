@@ -13,58 +13,20 @@
 #include "dama/neural/cnn.h"
 #include "dama/common/params.h"
 #include "dama/engine/movegen.h"
+#include "dama/search/mcts_worker.h"
 #include <string.h>
 #include <sched.h>
-
-// Forward declarations
-double simulate_rollout(Node *node, MCTSConfig config);
-extern Node* select_promising_node(Node *root, MCTSConfig config);
-extern void backpropagate(Node *node, double result, int use_solver);
-extern Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config);
-extern Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSConfig config);
-
-// =============================================================================
-// ASYNC BATCHING INFRASTRUCTURE
-// =============================================================================
-
-typedef struct {
-    Node *node;
-    float *policy_out;
-    float *value_out;
-    int ready;
-    pthread_cond_t cond;
-} InferenceRequest;
-
-typedef struct {
-    GameState states[MCTS_BATCH_SIZE];
-    InferenceRequest *requests[MCTS_BATCH_SIZE];
-    int count;
-    
-    pthread_mutex_t lock;
-    pthread_cond_t cond_batch_ready;
-    
-    volatile int shutdown;
-} InferenceQueue;
-
-typedef struct {
-    Node *root;
-    Arena *arena;
-    MCTSConfig config;
-    InferenceQueue *queue;
-    int thread_id;
-    MCTSStats *local_stats;
-} WorkerArgs;
 
 // =============================================================================
 // WORKER EXPANSION WRAPPER
 // =============================================================================
 
 // Wrapper that dispatches to the appropriate shared helper based on config
-static Node* perform_expansion_worker(Node *leaf, Arena *arena, MCTSConfig config, float *policy, MCTSStats *stats) {
+static Node* perform_expansion_worker(Node *leaf, Arena *arena, TranspositionTable *tt, MCTSConfig config, float *policy, MCTSStats *stats) {
     if (config.cnn_weights) {
-        return mcts_expand_with_policy(leaf, arena, config, policy, stats);
+        return mcts_expand_with_policy(leaf, arena, tt, config, policy, stats);
     } else {
-        return mcts_expand_vanilla(leaf, arena, config, stats);
+        return mcts_expand_vanilla(leaf, arena, tt, config, stats);
     }
 }
 
@@ -148,7 +110,7 @@ void *mcts_worker(void *arg) {
         }
 
         // 3. Expansion
-        Node *next_leaf = perform_expansion_worker(leaf, args->arena, config, (config.cnn_weights ? policy : NULL), args->local_stats);
+        Node *next_leaf = perform_expansion_worker(leaf, args->arena, args->tt, config, (config.cnn_weights ? policy : NULL), args->local_stats);
         
         // 4. Backpropagation
         backpropagate(next_leaf, value, config.use_solver);

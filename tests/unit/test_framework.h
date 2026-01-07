@@ -126,10 +126,10 @@ static inline void run_tests(const char *filter) {
         g_tests[i].func();
         
         if (g_current_test_passed) {
-            printf("  ✓ %s\n", g_tests[i].name);
+            printf("  ✓ %-55s [PASS]\n", g_tests[i].name);
             g_tests_passed++;
         } else {
-            printf("  ✗ %s\n", g_tests[i].name);
+            printf("  ✗ %-55s [FAIL]\n", g_tests[i].name);
             g_tests_failed++;
         }
     }

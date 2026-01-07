@@ -156,8 +156,12 @@ typedef struct {
     double points;
     int wins, losses, draws;
     double elo;
-    long long avg_iters;
-    long long avg_nodes;
+    double ips;
+    double nps;
+    double avg_depth;
+    double avg_bf;
+    double efficiency;
+    double peak_mem_mb;
     double win_rate_pct;
 } TournamentPlayerStats;
 

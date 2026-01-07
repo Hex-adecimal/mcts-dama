@@ -16,6 +16,12 @@ typedef struct {
     int wins, losses, draws;
     double points;
     long long total_iters, total_nodes, total_moves;
+    long long total_depth;
+    long long total_expansions;
+    long long total_children_expanded;
+    long long tt_hits, tt_misses;
+    double total_duration;
+    size_t peak_memory;
 } TournamentPlayer;
 
 typedef struct {

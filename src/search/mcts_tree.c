@@ -200,7 +200,7 @@ Node* find_child_by_move(Node *parent, const Move *move) {
 // EXPANSION
 // =============================================================================
 
-Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config) {
+Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig config, MCTSStats *stats) {
     DBG_NOT_NULL(node);
     DBG_NOT_NULL(arena);
     if (node->untried_moves.count == 0) return node;
@@ -221,6 +221,9 @@ Node* expand_node(Node *node, Arena *arena, TranspositionTable *tt, MCTSConfig c
             child->score = match->score;
             child->sum_sq_score = match->sum_sq_score;
             child->status = match->status;
+            if (stats) stats->tt_hits++;
+        } else {
+            if (stats) stats->tt_misses++;
         }
         tt_insert(tt, child);
     }

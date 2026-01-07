@@ -185,15 +185,16 @@ void cli_view_print_tournament_roster(const TournamentRosterView *view) {
 
 void cli_view_print_tournament_leaderboard(const TournamentLeaderboardView *view) {
     log_printf("\n\n");
-    log_printf("┌──────┬────────────────────────┬────────┬──────┬──────┬──────┬──────┬────────────┬────────────┬──────────┐\n");
-    log_printf("│ Rank │ Name                   │ Points │ Wins │ Loss │ Draw │ ELO  │ iter/Move  │ Nodes/Move │ Win Rate │\n");
-    log_printf("├──────┼────────────────────────┼────────┼──────┼──────┼──────┼──────┼────────────┼────────────┼──────────┤\n");
+    log_printf("┌──────┬────────────────────────┬────────┬──────┬──────┬──────┬──────┬────────┬────────┬────────┬──────┬──────┬──────┬──────────┐\n");
+    log_printf("│ Rank │ Name                   │ Points │ Wins │ Loss │ Draw │ ELO  │ IPS    │ NPS    │ Depth  │ BF   │ Eff%% │ Mem  │ Win Rate │\n");
+    log_printf("├──────┼────────────────────────┼────────┼──────┼──────┼──────┼──────┼────────┼────────┼────────┼──────┼──────┼──────┼──────────┤\n");
     
     for (int i = 0; i < view->count; i++) {
         const TournamentPlayerStats *p = &view->players[i];
-        log_printf("│ %-4d │ %-22s │ %-6.1f │ %-4d │ %-4d │ %-4d │ %-4.0f │ %-10s │ %-10s │ %5.1f%%   │\n", 
+        log_printf("│ %-4d │ %-22s │ %-6.1f │ %-4d │ %-4d │ %-4d │ %-4.0f │ %-6s │ %-6s │ %-6.1f │ %-4.1f │ %3.0f%% │ %-4s │ %5.1f%%   │\n", 
                p->rank, p->name, p->points, p->wins, p->losses, p->draws, p->elo, 
-               format_num(p->avg_iters), format_num(p->avg_nodes), p->win_rate_pct);
+               format_metric(p->ips), format_metric(p->nps), p->avg_depth, p->avg_bf, 
+               p->efficiency * 100.0, format_metric(p->peak_mem_mb * 1024 * 1024), p->win_rate_pct);
     }
-    log_printf("└──────┴────────────────────────┴────────┴──────┴──────┴──────┴──────┴────────────┴────────────┴──────────┘\n");
+    log_printf("└──────┴────────────────────────┴────────┴──────┴──────┴──────┴──────┴────────┴────────┴────────┴──────┴──────┴──────┴──────────┘\n");
 }

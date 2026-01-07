@@ -71,6 +71,17 @@ typedef struct {
     // Debug stats for tree analysis
     long total_expansions;      // How many nodes were expanded
     long total_policy_cached;   // How many times CNN policy was computed
+    
+    // Tree statistics (for branching factor and depth analysis)
+    long total_children_expanded;  // Sum of children across all expanded nodes
+    long nodes_with_children;      // Count of nodes that have children
+    
+    // TT statistics
+    long tt_hits;                  // TT cache hits (avoided re-expansion)
+    long tt_misses;                // TT cache misses
+    
+    // Hardware telemetry
+    size_t peak_memory_bytes;      // Peak RSS during search
 } MCTSStats;
 
 // =============================================================================
