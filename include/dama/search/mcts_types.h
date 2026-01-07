@@ -175,7 +175,6 @@ typedef struct Node {
     double sum_sq_score;
     double heuristic_score;
     float prior;
-    float *cached_policy;
     
     pthread_mutex_t lock;
     int8_t status;  // SolverStatus

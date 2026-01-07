@@ -85,7 +85,6 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
 
     node->score = 0.0;
     node->sum_sq_score = 0.0;
-    node->cached_policy = NULL;
     
     node->heuristic_score = evaluate_move_heuristic(&node->state, &node->move_from_parent, config);
     
@@ -114,44 +113,8 @@ Node* create_node(Node *parent, Move move, GameState state, Arena *arena, MCTSCo
             }
         }
         
-        // PUCT prior from cached policy
-        if (config.use_puct) {
-            if (!parent->cached_policy && config.cnn_weights) {
-                parent->cached_policy = (float*)arena_alloc(arena, CNN_POLICY_SIZE * sizeof(float));
-                
-                CNNOutput out;
-                const GameState *hist1 = parent->parent ? &parent->parent->state : NULL;
-                const GameState *hist2 = (parent->parent && parent->parent->parent) ? &parent->parent->parent->state : NULL;
-                cnn_forward_with_history((CNNWeights*)config.cnn_weights, &parent->state, hist1, hist2, &out);
-                
-                MoveList legal_moves;
-                movegen_generate(&parent->state, &legal_moves);
-                
-                double sum = 0.0;
-                for (int i = 0; i < legal_moves.count; i++) {
-                    int idx = cnn_move_to_index(&legal_moves.moves[i], parent->state.current_player);
-                    if (idx >= 0 && idx < CNN_POLICY_SIZE) sum += out.policy[idx];
-                }
-                
-                for (int i = 0; i < CNN_POLICY_SIZE; i++) parent->cached_policy[i] = 0.0f;
-                if (sum < 1e-9) sum = 1.0;
-                double scale = 1.0 / sum;
-                
-                for (int i = 0; i < legal_moves.count; i++) {
-                    int idx = cnn_move_to_index(&legal_moves.moves[i], parent->state.current_player);
-                    if (idx >= 0 && idx < CNN_POLICY_SIZE) parent->cached_policy[idx] = out.policy[idx] * scale;
-                }
-            }
-            
-            if (parent->cached_policy) {
-                int idx = cnn_move_to_index(&move, parent->state.current_player);
-                node->prior = (idx >= 0 && idx < CNN_POLICY_SIZE) ? parent->cached_policy[idx] : 0.0f;
-            } else {
-                node->prior = 1.0f;
-            }
-        } else {
-            node->prior = 0.0f;
-        }
+        node->prior = 0.0f; // Assigned by caller (perform_expansion)
+
 
         // Loop detection
         Node *ancestor = parent;

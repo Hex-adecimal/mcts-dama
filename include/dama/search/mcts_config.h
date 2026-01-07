@@ -54,6 +54,7 @@ typedef struct MCTSConfig {
     void *nn_weights;
     void *cnn_weights;
     int max_nodes;
+    int num_threads;
 } MCTSConfig;
 
 // =============================================================================
@@ -126,6 +127,7 @@ static inline MCTSConfig mcts_get_preset(MCTSPreset preset) {
     cfg.rollout_epsilon = ROLLOUT_EPSILON_RANDOM;
     cfg.use_lookahead = 0;
     cfg.use_tree_reuse = 0;
+    cfg.num_threads = NUM_MCTS_THREADS;
 
     switch (preset) {
         case MCTS_PRESET_PURE_VANILLA:

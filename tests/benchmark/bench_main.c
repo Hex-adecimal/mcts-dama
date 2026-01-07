@@ -292,6 +292,7 @@ static void bench_mcts(void) {
     
     // MCTS 100 nodes Vanilla
     {
+        MCTSStats stats = {0};
         int iter = 0;
         double start = get_time_ms();
         while (get_time_ms() - start < TARGET_TIME_MS || iter < MIN_ITERATIONS) {
@@ -302,7 +303,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_VANILLA);
             config.max_nodes = 100;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, &stats, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -311,6 +312,7 @@ static void bench_mcts(void) {
     
     // MCTS 500 nodes Vanilla
     {
+        MCTSStats stats = {0};
         int iter = 0;
         double start = get_time_ms();
         while (get_time_ms() - start < TARGET_TIME_MS || iter < MIN_ITERATIONS) {
@@ -321,7 +323,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_VANILLA);
             config.max_nodes = 500;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, &stats, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -330,6 +332,7 @@ static void bench_mcts(void) {
     
     // MCTS 100 nodes Grandmaster
     {
+        MCTSStats stats = {0};
         int iter = 0;
         double start = get_time_ms();
         while (get_time_ms() - start < TARGET_TIME_MS || iter < MIN_ITERATIONS) {
@@ -340,7 +343,7 @@ static void bench_mcts(void) {
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_GRANDMASTER);
             config.max_nodes = 100;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, &stats, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -365,6 +368,7 @@ static void bench_mcts(void) {
     
     // MCTS 1000 nodes with AlphaZero config (heavier)
     {
+        MCTSStats stats = {0};
         CNNWeights weights;
         cnn_init(&weights);
         
@@ -379,7 +383,7 @@ static void bench_mcts(void) {
             config.max_nodes = 1000;
             config.cnn_weights = &weights;
             Node *root = mcts_create_root(state, &arena, config);
-            mcts_search(root, &arena, 10.0, config, NULL, NULL);
+            mcts_search(root, &arena, 10.0, config, &stats, NULL, NULL);
             arena_free(&arena);
             iter++;
         }
@@ -400,13 +404,53 @@ static void bench_mcts(void) {
             arena_init(&arena, ARENA_SIZE_BENCHMARK);
             MCTSConfig config = mcts_get_preset(MCTS_PRESET_VANILLA);
             
-            // Just benchmark TT create/free since insert/lookup need more setup
+            // Just benchmark TT create/free
             arena_free(&arena);
             tt_free(tt);
             iter++;
         }
         print_result("tt: create+free (4096)", iter, get_time_ms() - start);
     }
+
+    // Parallel Scaling Benchmarks
+    print_section("PARALLEL SCALING (AlphaZero)");
+    
+    CNNWeights weights;
+    cnn_init(&weights);
+    
+    int threads_to_test[] = {1, 2, 4, 8};
+    for (int t = 0; t < 4; t++) {
+        int n_threads = threads_to_test[t];
+        MCTSStats stats = {0};
+        
+        int iter = 0;
+        double start = get_time_ms();
+        
+        // We run fewer iterations for heavy threaded tests to save time
+        double target_time = 2000.0; 
+        
+        while (get_time_ms() - start < target_time || iter < 3) {
+            GameState state;
+            init_game(&state);
+            Arena arena;
+            arena_init(&arena, ARENA_SIZE_BENCHMARK);
+            MCTSConfig config = mcts_get_preset(MCTS_PRESET_ALPHA_ZERO);
+            config.max_nodes = 800;
+            config.cnn_weights = &weights;
+            config.num_threads = n_threads;
+            
+            Node *root = mcts_create_root(state, &arena, config);
+            mcts_search(root, &arena, 10.0, config, &stats, NULL, NULL);
+            arena_free(&arena);
+            iter++;
+        }
+        
+        char name[64];
+        snprintf(name, sizeof(name), "mcts: 800 nodes (%d threads)", n_threads);
+        print_result(name, iter, get_time_ms() - start);
+    }
+    
+    cnn_free(&weights);
 }
 
 

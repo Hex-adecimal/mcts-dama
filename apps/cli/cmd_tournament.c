@@ -53,13 +53,14 @@ static void on_game_complete(const TournamentGameResult *r) {
     double depth1 = (double)r->s1.total_depth / moves1;
     double ips1 = (d1 > 0.001) ? (double)r->s1.total_iterations / d1 : 0.0;
     double nps1 = (d1 > 0.001) ? (double)r->s1.total_nodes / d1 : 0.0;
+    long avg_iters1 = r->s1.total_iterations / moves1;
     double bf1 = (r->s1.nodes_with_children > 0) ? 
         (double)r->s1.total_children_expanded / r->s1.nodes_with_children : 0.0;
     double eff1 = (r->s1.tt_hits + r->s1.tt_misses > 0) ? 
         (double)r->s1.tt_hits * 100.0 / (r->s1.tt_hits + r->s1.tt_misses) : 0.0;
     
-    printf("    [%-15s]: %s iters, %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
-           n1, format_num(r->s1.total_iterations), format_num(r->s1.total_nodes), 
+    printf("    [%-15s]: %s iters (%s/mv), %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
+           n1, format_num(r->s1.total_iterations), format_num(avg_iters1), format_num(r->s1.total_nodes), 
            depth1, bf1, format_metric(ips1), format_metric(nps1), eff1,
            format_metric(r->s1.peak_memory_bytes));
 
@@ -69,13 +70,14 @@ static void on_game_complete(const TournamentGameResult *r) {
     double depth2 = (double)r->s2.total_depth / moves2;
     double ips2 = (d2 > 0.001) ? (double)r->s2.total_iterations / d2 : 0.0;
     double nps2 = (d2 > 0.001) ? (double)r->s2.total_nodes / d2 : 0.0;
+    long avg_iters2 = r->s2.total_iterations / moves2;
     double bf2 = (r->s2.nodes_with_children > 0) ? 
         (double)r->s2.total_children_expanded / r->s2.nodes_with_children : 0.0;
     double eff2 = (r->s2.tt_hits + r->s2.tt_misses > 0) ? 
         (double)r->s2.tt_hits * 100.0 / (r->s2.tt_hits + r->s2.tt_misses) : 0.0;
     
-    printf("    [%-15s]: %s iters, %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
-           n2, format_num(r->s2.total_iterations), format_num(r->s2.total_nodes), 
+    printf("    [%-15s]: %s iters (%s/mv), %s nodes | D%2.1f, BF%.1f | %s ips, %s nps | Eff%2.0f%% | Mem: %s\n",
+           n2, format_num(r->s2.total_iterations), format_num(avg_iters2), format_num(r->s2.total_nodes), 
            depth2, bf2, format_metric(ips2), format_metric(nps2), eff2,
            format_metric(r->s2.peak_memory_bytes));
 }

@@ -139,7 +139,7 @@ TEST(search_mcts_search_returns_valid_move) {
     
     Node *root = mcts_create_root(state, &arena, config);
     
-    Move best = mcts_search(root, &arena, 0.1, config, NULL, NULL);
+    Move best = mcts_search(root, &arena, 0.1, config, NULL, NULL, NULL);
     
     // Move should have valid from/to
     ASSERT_NE(best.path[0], best.path[1]);
@@ -456,7 +456,7 @@ TEST(search_tree_reuse_preserves_stats) {
     Node *root = mcts_create_root(state, &arena, config);
     Node *new_root = NULL;
     
-    Move best = mcts_search(root, &arena, 0.1, config, NULL, &new_root);
+    Move best = mcts_search(root, &arena, 0.1, config, NULL, NULL, &new_root);
     
     // new_root should be a child with visits
     if (new_root) {
@@ -543,7 +543,7 @@ TEST(search_more_nodes_equals_better_or_same_move) {
     // Search with 500 nodes (same position)
     config.max_nodes = 500;
     Node *root2 = mcts_create_root(state, &arena2, config);
-    Move move2 = mcts_search(root2, &arena2, 5.0, config, NULL, NULL);
+    Move move2 = mcts_search(root2, &arena2, 5.0, config, NULL, NULL, NULL);
     int visits2 = 0;
     for (int i = 0; i < root2->num_children; i++) {
         if (moves_equal(&root2->children[i]->move_from_parent, &move2)) {

@@ -428,8 +428,8 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     InferenceQueue queue;
     mcts_init_queue(&queue);
     
-    // 1. Spawn Workers (if NUM_MCTS_THREADS > 0)
-    int n_workers = NUM_MCTS_THREADS;
+    // 1. Spawn Workers (if num_threads > 0)
+    int n_workers = config.num_threads;
     pthread_t workers[n_workers > 0 ? n_workers : 1];
     WorkerArgs args[n_workers > 0 ? n_workers : 1];
     MCTSStats *worker_stats_arr = NULL;
@@ -462,7 +462,7 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
             }
         }
         
-        if (NUM_MCTS_THREADS == 0) {
+        if (n_workers == 0) {
             mcts_step_sequential(root, arena, config, stats, tt);
             continue;
         }
@@ -482,10 +482,10 @@ Move mcts_search(Node *root, Arena *arena, double time_limit_seconds, MCTSConfig
     long expansions_this_move = 0;
     long children_this_move = 0;
 
-    if (NUM_MCTS_THREADS > 0) {
-        mcts_shutdown_workers(workers, NUM_MCTS_THREADS, &queue, worker_stats_arr,
+    if (n_workers > 0) {
+        mcts_shutdown_workers(workers, n_workers, &queue, worker_stats_arr,
                               &iter_this_move, &expansions_this_move, &children_this_move);
-        mcts_merge_worker_stats(stats, worker_stats_arr, NUM_MCTS_THREADS);
+        mcts_merge_worker_stats(stats, worker_stats_arr, n_workers);
         free(worker_stats_arr);
     } else {
         iter_this_move = root->visits;
